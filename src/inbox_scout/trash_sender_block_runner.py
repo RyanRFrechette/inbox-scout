@@ -40,7 +40,7 @@ def append_jsonl(path: Path, data: Any) -> None:
 def get_settings_service():
     try:
         from inbox_scout.gmail_auth import get_gmail_service
-        return get_gmail_service(mode="modify")
+        return get_gmail_service(mode="settings")
     except Exception as e:
         raise RuntimeError("Could not load Gmail service.") from e
 

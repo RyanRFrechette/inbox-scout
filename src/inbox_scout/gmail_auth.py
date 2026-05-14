@@ -12,10 +12,12 @@ console = Console()
 
 READONLY_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 MODIFY_SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
+SETTINGS_SCOPES = ["https://www.googleapis.com/auth/gmail.settings.basic"]
 
 CREDENTIALS_FILE = CREDENTIALS_DIR / "credentials.json"
 READONLY_TOKEN_FILE = PROJECT_ROOT / "token.json"
 MODIFY_TOKEN_FILE = PROJECT_ROOT / "token_modify.json"
+SETTINGS_TOKEN_FILE = PROJECT_ROOT / "token_settings.json"
 
 
 def get_auth_config(mode="readonly"):
@@ -25,7 +27,10 @@ def get_auth_config(mode="readonly"):
     if mode == "modify":
         return MODIFY_SCOPES, MODIFY_TOKEN_FILE, "modify"
 
-    raise ValueError("Invalid Gmail auth mode. Use 'readonly' or 'modify'.")
+    if mode == "settings":
+        return SETTINGS_SCOPES, SETTINGS_TOKEN_FILE, "settings"
+
+    raise ValueError("Invalid Gmail auth mode. Use 'readonly', 'modify', or 'settings'.")
 
 
 def get_gmail_service(mode="readonly"):
