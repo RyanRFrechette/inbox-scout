@@ -61,8 +61,8 @@ def validate_latest_plan(plan: dict[str, Any]) -> tuple[bool, str]:
         return False, "The saved plan target is not supported yet."
 
     limit = plan.get("requested_limit")
-    if not isinstance(limit, int) or limit < 1 or limit > 5:
-        return False, "The scan plan has an unsafe batch size. Please say 'sort 5 emails' to start."
+    if not isinstance(limit, int) or limit < 1 or limit > 25:
+        return False, "The scan plan has an unsafe batch size. Please say 'sort 5 emails' or 'cleanup test 25' to start."
 
     return True, "Plan is safe for read-only scan."
 

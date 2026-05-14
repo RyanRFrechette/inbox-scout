@@ -82,6 +82,7 @@ def run_full_cleanup_scan() -> str:
                 )
             except Exception as e:
                 scan_error = str(e)
+                _log_error(f"fetch_report_emails exception at batch {batch_count}:\n{traceback.format_exc()}")
                 break
 
             if not emails:
@@ -91,6 +92,7 @@ def run_full_cleanup_scan() -> str:
                 classified = classify_for_report(emails)
             except Exception as e:
                 scan_error = str(e)
+                _log_error(f"classify_for_report exception at batch {batch_count}:\n{traceback.format_exc()}")
                 break
 
             for item in classified:
@@ -108,6 +110,9 @@ def run_full_cleanup_scan() -> str:
 
         if len(all_results) >= cap_emails and page_token:
             stopped_by_cap = True
+
+        if scan_error and all_results:
+            save_progress("scan_error", len(all_results), batch_count, cap_emails)
 
         if batch_count == 0:
             error_detail = f" Error: {scan_error}" if scan_error else ""

@@ -67,8 +67,11 @@ def build_scan_queue_plan(message: str, continuation: bool = False, cleanup_mode
 
     elif parsed.sort_all or cleanup_mode:
         workflow_mode = "commands_planned"
-        effective_limit = 5
-        page_size = 5
+        if cleanup_mode and parsed.limit is not None and "test" in message.lower():
+            effective_limit = parsed.limit
+        else:
+            effective_limit = 5
+        page_size = min(5, effective_limit)
         report_command = (
             f'.\\.venv\\Scripts\\python.exe -m inbox_scout.report_mode '
             f'--limit {effective_limit} --page-size {page_size} --unread-only --export both'

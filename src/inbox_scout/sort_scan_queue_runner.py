@@ -17,7 +17,7 @@ LATEST_SCAN_QUEUE_PLAN = PLANS_DIR / "latest_scan_queue_plan.json"
 LATEST_SCAN_QUEUE_RUN = PLANS_DIR / "latest_scan_queue_run.json"
 LATEST_GMAIL_SCAN_CURSOR = PLANS_DIR / "latest_gmail_scan_cursor.json"
 
-MAX_SAFE_RUN_LIMIT = 5
+MAX_SAFE_RUN_LIMIT = 25
 
 
 @dataclass

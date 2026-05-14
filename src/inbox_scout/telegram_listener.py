@@ -2,6 +2,8 @@
 
 import argparse
 import json
+import traceback
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +20,14 @@ from inbox_scout.natural_intent import handle_natural_message
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STATE_PATH = PROJECT_ROOT / "config" / "telegram_listener_state.json"
 LATEST_QUEUE = PROJECT_ROOT / "data" / "review_queue" / "latest_queue.json"
+LOG_PATH = PROJECT_ROOT / "data" / "logs" / "telegram_watch.log"
+
+
+def _log_error(msg: str) -> None:
+    LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with LOG_PATH.open("a", encoding="utf-8") as f:
+        f.write(f"[{stamp}] {msg}\n")
 
 
 def clean(value: Any) -> str:
@@ -198,8 +208,23 @@ def run_once() -> None:
             continue
 
         print(f"Command received: {text}")
-        reply = handle_command(text)
-        send_message(reply)
+        try:
+            reply = handle_command(text)
+        except Exception as exc:
+            _log_error(
+                f"handle_command exception for {text!r}:\n{traceback.format_exc()}"
+            )
+            reply = (
+                f"Scan stopped. Error: {type(exc).__name__}: {exc}\n\n"
+                "Gmail not touched."
+            )
+        try:
+            send_message(reply)
+        except Exception as send_exc:
+            _log_error(
+                f"send_message failed: {type(send_exc).__name__}: {send_exc}\n"
+                f"Reply was: {reply[:300]}"
+            )
         print("Reply sent.")
 
     state["offset"] = newest_update_id
