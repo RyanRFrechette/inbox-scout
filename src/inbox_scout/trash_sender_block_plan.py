@@ -33,8 +33,8 @@ SYSTEM_SENDER_PATTERNS = [
     r"account@",
     r"alerts@",
     r"notifications@",
-    r"support@.*google",
-    r"accounts@.*google",
+    r"support@(.*\.)?google\.com$",
+    r"accounts@(.*\.)?google\.com$",
 ]
 _SYSTEM_RE = [re.compile(p, re.IGNORECASE) for p in SYSTEM_SENDER_PATTERNS]
 

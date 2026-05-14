@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from inbox_scout.trash_sender_block_plan import LATEST_SENDER_BLOCK_PLAN, PLAN_MAX_AGE_MINUTES
+from inbox_scout.trash_sender_block_plan import LATEST_SENDER_BLOCK_PLAN, PLAN_MAX_AGE_MINUTES, extract_email
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -40,22 +40,18 @@ def append_jsonl(path: Path, data: Any) -> None:
 def get_settings_service():
     try:
         from inbox_scout.gmail_auth import get_gmail_service
-        try:
-            return get_gmail_service(mode="modify")
-        except TypeError:
-            return get_gmail_service("modify")
+        return get_gmail_service(mode="modify")
     except Exception as e:
         raise RuntimeError("Could not load Gmail service.") from e
 
 
 def scope_is_available(service) -> bool:
-    """Test if gmail.settings.basic is usable by probing the filters.list endpoint."""
+    """Return True only after a clean successful probe of the Gmail Settings API."""
     try:
         service.users().settings().filters().list(userId="me").execute()
         return True
-    except Exception as exc:
-        msg = str(exc).lower()
-        return "insufficient" not in msg and "403" not in msg and "scope" not in msg
+    except Exception:
+        return False
 
 
 def load_and_validate_plan(confirmation: str) -> tuple[list[str], list[str]]:
@@ -106,6 +102,26 @@ def load_and_validate_plan(confirmation: str) -> tuple[list[str], list[str]]:
     return senders, []
 
 
+def get_existing_blocked_senders(service) -> set[str]:
+    """Return email addresses already targeted by a Trash+removeInbox Gmail filter."""
+    try:
+        result = service.users().settings().filters().list(userId="me").execute()
+        filters = result.get("filter", [])
+    except Exception:
+        return set()
+    blocked: set[str] = set()
+    for f in filters:
+        criteria_from = f.get("criteria", {}).get("from", "")
+        action = f.get("action", {})
+        adds = action.get("addLabelIds", [])
+        removes = action.get("removeLabelIds", [])
+        if "TRASH" in adds and "INBOX" in removes and criteria_from:
+            addr = extract_email(criteria_from)
+            if addr:
+                blocked.add(addr)
+    return blocked
+
+
 def is_scope_error(exc: Exception) -> bool:
     msg = str(exc).lower()
     return "insufficient" in msg or ("403" in msg and "scope" in msg)
@@ -150,10 +166,22 @@ def build_sender_block_runner_message(confirmation: str) -> str:
         )
 
     run_id = datetime.now(timezone.utc).strftime("blockrun_%Y%m%d_%H%M%S")
+    existing_blocked = get_existing_blocked_senders(service)
     blocked: list[str] = []
+    skipped: list[str] = []
     failed: list[str] = []
 
     for sender in senders:
+        if sender in existing_blocked:
+            skipped.append(sender)
+            append_jsonl(SENDER_BLOCK_LOG, {
+                "run_id": run_id,
+                "timestamp": now_iso(),
+                "event": "filter_skipped_duplicate",
+                "sender": sender,
+                "gmail_changed": False,
+            })
+            continue
         ok, err = create_filter_for_sender(service, sender)
         if ok:
             blocked.append(sender)
@@ -199,15 +227,23 @@ def build_sender_block_runner_message(confirmation: str) -> str:
         for s in blocked:
             lines.append(f"  - {s}")
 
+    if skipped:
+        if lines:
+            lines.append("")
+        lines.append(f"Already blocked ({len(skipped)}) — skipped (no duplicate filters created):")
+        for s in skipped:
+            lines.append(f"  - {s}")
+
     if failed:
         other_failures = [f for f in failed if "SCOPE_ERROR" not in f]
         if other_failures:
-            lines.append("")
+            if lines:
+                lines.append("")
             lines.append(f"Failed ({len(other_failures)}):")
             for f_msg in other_failures:
                 lines.append(f"  - {f_msg}")
 
-    if not blocked and not failed:
+    if not blocked and not skipped and not failed:
         lines.append("No senders processed. Gmail not touched.")
 
     return "\n".join(lines)
