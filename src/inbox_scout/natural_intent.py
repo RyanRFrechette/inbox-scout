@@ -54,14 +54,6 @@ def sort_plan_message(text: str) -> str:
     plan = build_scan_queue_plan(text)
     save_plan(plan)
 
-    if plan.workflow_mode == "blocked_large_scan":
-        return (
-            "I understand you want me to sort everything.\n\n"
-            "I am blocking that for now because full-inbox sorting needs extra safety checks first.\n\n"
-            "Start with a small test like: sort 5 emails.\n\n"
-            "I did not scan Gmail. I did not touch Gmail."
-        )
-
     if plan.workflow_mode == "blocked_phase_14_only":
         return (
             "That sounds like a permanent delete request.\n\n"
@@ -74,6 +66,22 @@ def sort_plan_message(text: str) -> str:
             "I am not sure how to safely turn that into an inbox sorting plan yet.\n\n"
             "Try saying: sort 5 emails.\n\n"
             "I did not touch Gmail."
+        )
+
+    if plan.sort_all:
+        return (
+            "I can sort your inbox safely in batches of 5 emails.\n\n"
+            "I will scan the next 5 unread emails and build a review queue.\n"
+            "After each batch, say 'continue sorting' to process the next 5.\n\n"
+            "Safety check:\n"
+            "- I will only read Gmail.\n"
+            "- I will not archive anything.\n"
+            "- I will not move anything to Trash.\n"
+            "- I will not mark anything read.\n"
+            "- I will not reply or delete anything.\n\n"
+            "I did not scan Gmail yet.\n\n"
+            "Want me to start the first safe batch now?\n"
+            "Reply yes to continue, or cancel to stop."
         )
 
     return (
@@ -313,6 +321,14 @@ def handle_natural_message(text: str) -> str:
 
     if any(phrase in msg for phrase in ["queue", "show emails", "show my emails", "latest batch"]):
         return queue_summary()
+
+    if any(phrase in msg for phrase in [
+        "continue sorting",
+        "sort more",
+        "next batch",
+        "keep sorting",
+    ]):
+        return sort_plan_message("sort all")
 
     if any(phrase in msg for phrase in ["next", "next review", "needs review", "what needs my attention"]):
         return next_review_item()

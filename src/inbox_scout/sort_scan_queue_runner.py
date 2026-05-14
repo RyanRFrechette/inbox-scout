@@ -71,10 +71,6 @@ def validate_plan(plan: dict[str, Any]) -> tuple[bool, list[str]]:
         notes.append(f"Blocked: workflow_mode is {plan.get('workflow_mode')}.")
         return False, notes
 
-    if plan.get("sort_all") is True:
-        notes.append("Blocked: sort-all cannot run from this runner yet.")
-        return False, notes
-
     if plan.get("target") != "unread_inbox":
         notes.append(f"Blocked: unsupported target {plan.get('target')}.")
         return False, notes

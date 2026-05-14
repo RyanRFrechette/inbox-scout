@@ -56,14 +56,12 @@ def validate_latest_plan(plan: dict[str, Any]) -> tuple[bool, str]:
     if plan.get("workflow_mode") != "commands_planned":
         return False, "The saved plan is not safe to run. Please start with: sort 5 emails."
 
-    if plan.get("sort_all") is True:
-        return False, "I cannot run sort-all yet. Full inbox sorting is still blocked."
-
     if plan.get("target") != "unread_inbox":
         return False, "The saved plan target is not supported yet."
 
-    if plan.get("requested_limit") != 5:
-        return False, "For now I can only run the 5-email read-only scan from Telegram."
+    limit = plan.get("requested_limit")
+    if not isinstance(limit, int) or limit < 1 or limit > 5:
+        return False, "The scan plan has an unsafe batch size. Please say 'sort 5 emails' to start."
 
     return True, "Plan is safe for read-only scan."
 
@@ -119,8 +117,18 @@ def build_scan_approval_response(_: str = "") -> str:
     protected = find_count("Protected/manual review", queue_output)
     pending = find_count("Pending low-risk review", queue_output)
 
+    is_sort_all = plan.get("sort_all") is True
+    limit = plan.get("requested_limit") or 5
+
+    continuation = (
+        "\n\nThere may be more unread emails in your inbox. "
+        "Say 'continue sorting' to process the next safe batch of 5."
+        if is_sort_all
+        else ""
+    )
+
     return (
-        "Done. I safely scanned 5 unread inbox emails and built a new review queue.\n\n"
+        f"Done. I safely scanned {limit} unread inbox emails and built a new review queue.\n\n"
         f"Result:\n"
         f"- Total queued emails: {total}\n"
         f"- Protected/manual review: {protected}\n"
@@ -130,6 +138,7 @@ def build_scan_approval_response(_: str = "") -> str:
         "I did not move anything to Trash.\n"
         "I did not mark anything read.\n"
         "I did not reply or delete anything."
+        f"{continuation}"
     )
 
 

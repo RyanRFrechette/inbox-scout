@@ -53,6 +53,7 @@ def build_scan_queue_plan(message: str) -> ScanQueuePlan:
 
     report_command = None
     queue_command = None
+    effective_limit = parsed.limit
 
     if parsed.intent == "permanent_delete_plan_only":
         workflow_mode = "blocked_phase_14_only"
@@ -63,23 +64,33 @@ def build_scan_queue_plan(message: str) -> ScanQueuePlan:
         safety_notes.append("Could not build a scan plan from this message.")
 
     elif parsed.sort_all:
-        workflow_mode = "blocked_large_scan"
-        safety_notes.append("Sort-all remains blocked. Use a 5-email test batch first.")
+        workflow_mode = "commands_planned"
+        effective_limit = 5
+        page_size = 5
+        report_command = (
+            f'.\\.venv\\Scripts\\python.exe -m inbox_scout.report_mode '
+            f'--limit {effective_limit} --page-size {page_size} --unread-only --export both'
+        )
+        queue_command = (
+            '.\\.venv\\Scripts\\python.exe -m inbox_scout.review_queue --from-latest-report'
+        )
+        safety_notes.append("Sort-all runs in safe batches of 5. Say 'continue sorting' after each batch.")
+        safety_notes.append("Review queue command is local-only and makes no Gmail changes.")
 
     else:
         workflow_mode = "commands_planned"
-        limit = parsed.limit or 5
-        page_size = min(5, limit)
+        effective_limit = parsed.limit or 5
+        page_size = min(5, effective_limit)
 
         report_command = (
             f'.\\.venv\\Scripts\\python.exe -m inbox_scout.report_mode '
-            f'--limit {limit} --page-size {page_size} --unread-only --export both'
+            f'--limit {effective_limit} --page-size {page_size} --unread-only --export both'
         )
         queue_command = (
-            f'.\\.venv\\Scripts\\python.exe -m inbox_scout.review_queue --from-latest-report'
+            '.\\.venv\\Scripts\\python.exe -m inbox_scout.review_queue --from-latest-report'
         )
 
-        safety_notes.append(f"Prepared read-only scan command for {limit} unread Inbox emails.")
+        safety_notes.append(f"Prepared read-only scan command for {effective_limit} unread Inbox emails.")
         safety_notes.append("Review queue command is local-only and makes no Gmail changes.")
 
     return ScanQueuePlan(
@@ -87,7 +98,7 @@ def build_scan_queue_plan(message: str) -> ScanQueuePlan:
         created_at=now_iso(),
         original_message=message,
         parsed_intent=parsed.intent,
-        requested_limit=parsed.limit,
+        requested_limit=effective_limit,
         sort_all=parsed.sort_all,
         target=parsed.target,
         workflow_mode=workflow_mode,
