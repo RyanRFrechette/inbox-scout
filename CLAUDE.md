@@ -1,6 +1,6 @@
 # Inbox Scout - CLAUDE.md
 
-Last updated: 2026-05-13
+Last updated: 2026-05-14
 
 ---
 
@@ -20,15 +20,23 @@ The Telegram bot ("Atlas") allows Ryan to run inbox operations from his phone wi
 ## 2. Current phase / status
 
 **Current branch:** master
-**Last commit:** `971ee55` — docs: add Claude project memory (2026-05-13)
+**Last commit:** `150acbf` — chore: archive phase backup snapshots before Phase 13X (2026-05-14)
 
-**Phase 13V** is the most recently completed phase (2026-05-14):
+**Pre-13X Backup Archive Cleanup** is the most recently completed phase (2026-05-14):
+- Moved 12 backup/snapshot files from `src/inbox_scout/` to `archive/phase_backups/`
+- Git recorded all 12 as renames (no content deletions)
+- No source code behavior changed. No docs edited in that commit.
+- No config, token, credential, .env, data, queue, log, or Gmail files touched.
+- No Gmail actions run.
+- Verification passed: py_compile OK for natural_intent, telegram_watch, trash_execution_runner, report_mode; natural_intent import OK.
+- Commit: `150acbf`
+
+**Phase 13V** was completed prior (2026-05-14):
 - Telegram watcher hardening fully verified
 - Hardened launcher started cleanly from a fresh PowerShell window
 - Atlas responded to ping through Telegram
 - Watcher stopped cleanly with Ctrl+C
 - Watcher restarted cleanly — no stale lock or duplicate-instance error
-- No source code changes. No Gmail actions. No config changes. No token/credential/data files touched.
 
 **Phase 13W** was completed prior (2026-05-13):
 - Cleaned up `natural_intent.py` — removed 194 lines of dead/duplicate code
@@ -36,7 +44,7 @@ The Telegram bot ("Atlas") allows Ryan to run inbox operations from his phone wi
 **Current safety mode:** READ-ONLY ONLY (see PROJECT_STATE.md for flag details)
 
 **Next planned steps (in order):**
-1. Phase 13X — Sort-all as a safe batch loop (consider cleanup/archive of .bak files first)
+1. Phase 13X — Sort-all as a safe batch loop
 2. Phase 13Y — Natural UX polish
 3. Phase 13Z — Final local MVP
 4. Phase 14 — Permanent delete mode (nuclear, disabled until explicitly enabled)
@@ -132,7 +140,7 @@ See `TEST_COMMANDS.md` for the full list of safe test commands.
 
 ## 9. Current next steps
 
-1. **Phase 13X** — Design and implement a safe sort-all batch loop (natural language → Telegram-controlled batch queue). Consider cleanup/archive of `.bak` and backup snapshot files before starting.
+1. **Phase 13X** — Design and implement a safe sort-all batch loop (natural language → Telegram-controlled batch queue).
 2. Continue through 13Y (UX polish), 13Z (final local MVP), then discuss Phase 14 (permanent delete, nuclear mode) separately.
 
 **Do not jump ahead to Phase 14 without Ryan explicitly initiating it.**

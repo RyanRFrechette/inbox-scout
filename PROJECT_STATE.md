@@ -1,6 +1,6 @@
 ﻿# Inbox Scout - Project State
 
-Last updated: 2026-05-13
+Last updated: 2026-05-14
 
 ## Current location
 C:\Users\ryanr\inbox-scout
@@ -3418,4 +3418,49 @@ Next recommended step:
 - Then consider archive/ folder structure cleanup for .bak and snapshot files.
 - Then continue toward MVP loop: sort X emails -> plan -> approve -> Trash -> summarize.
 - Phase 14 permanent delete stays disabled until explicitly enabled with nuclear confirmation.
+
+
+---
+
+## Pre-13X Backup Archive Cleanup COMPLETE
+
+Completed: 2026-05-14
+Commit: 150acbf — chore: archive phase backup snapshots before Phase 13X
+
+Change:
+- Moved 12 backup/snapshot files from src/inbox_scout/ to archive/phase_backups/.
+- Git recorded all 12 as renames (0 insertions, 0 content deletions).
+- No source code behavior changed.
+- No docs were edited in this commit.
+
+Files moved:
+- gmail_auth.py.bak_20260507_210318
+- queue_item.py.bak_20260507_205957
+- queue_item.py.bak_20260507_211027
+- report_mode.py.bak_20260507_205301
+- report_mode.py.bak_ai_timeout_safe_20260508_184206
+- report_mode.py.bak_phase11b_20260508_173925
+- report_mode.py.bak_phase11b_20260508_182837
+- natural_intent.before_phase13u_20260512_211434.py
+- telegram_status.before_phase13u_20260512_211434.py
+- telegram_watch.before_phase13v_final.py
+- telegram_watch.before_phase13v_selfprotect.py
+- trash_execution_runner.phase13s_backup.py
+
+Verification passed:
+- py_compile OK: natural_intent.py, telegram_watch.py, trash_execution_runner.py, report_mode.py
+- natural_intent import OK (PYTHONPATH=src)
+- Repo clean after commit
+
+Files NOT touched:
+- No config, token, credential, or .env files
+- No data, queue, log, or Gmail files
+- No source code edited
+
+Gmail changes: 0
+Permanent deletes: 0
+Replies sent: 0
+
+Next recommended phase:
+Phase 13X - Sort-all as a safe batch loop.
 

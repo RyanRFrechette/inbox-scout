@@ -208,6 +208,13 @@ Only file changed: src/inbox_scout/natural_intent.py.
 No Gmail actions. No config changes. No token/credential/data files touched.
 Tests: py_compile OK, import OK.
 
+## Pre-13X Backup Archive Cleanup
+Status: COMPLETE
+Commit: 150acbf — 2026-05-14
+Moved 12 backup/snapshot files from src/inbox_scout/ to archive/phase_backups/.
+Git recorded as renames. No source code changed. No Gmail actions. No config/token/data files touched.
+Verification passed: py_compile OK (natural_intent, telegram_watch, trash_execution_runner, report_mode), import OK.
+
 ---
 
 ## Planned phases (not yet started)
