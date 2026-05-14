@@ -20,24 +20,26 @@ The Telegram bot ("Atlas") allows Ryan to run inbox operations from his phone wi
 ## 2. Current phase / status
 
 **Current branch:** master
-**Last commit:** `33295e4` — docs: record Phase 13W completion (2026-05-13)
+**Last commit:** `971ee55` — docs: add Claude project memory (2026-05-13)
 
-**Phase 13W** is the most recently completed phase:
+**Phase 13V** is the most recently completed phase (2026-05-14):
+- Telegram watcher hardening fully verified
+- Hardened launcher started cleanly from a fresh PowerShell window
+- Atlas responded to ping through Telegram
+- Watcher stopped cleanly with Ctrl+C
+- Watcher restarted cleanly — no stale lock or duplicate-instance error
+- No source code changes. No Gmail actions. No config changes. No token/credential/data files touched.
+
+**Phase 13W** was completed prior (2026-05-13):
 - Cleaned up `natural_intent.py` — removed 194 lines of dead/duplicate code
-- No Gmail actions. No config changes. No token/credential/data files touched.
-
-**Phase 13V** is PAUSED:
-- Telegram watcher hardening written and mostly tested
-- One clean startup/restart verification still needed before marking complete
 
 **Current safety mode:** READ-ONLY ONLY (see PROJECT_STATE.md for flag details)
 
 **Next planned steps (in order):**
-1. Phase 13V final — one clean startup/restart verification of hardened Telegram watcher
-2. Phase 13X — Sort-all as a safe batch loop
-3. Phase 13Y — Natural UX polish
-4. Phase 13Z — Final local MVP
-5. Phase 14 — Permanent delete mode (nuclear, disabled until explicitly enabled)
+1. Phase 13X — Sort-all as a safe batch loop (consider cleanup/archive of .bak files first)
+2. Phase 13Y — Natural UX polish
+3. Phase 13Z — Final local MVP
+4. Phase 14 — Permanent delete mode (nuclear, disabled until explicitly enabled)
 
 ---
 
@@ -130,9 +132,8 @@ See `TEST_COMMANDS.md` for the full list of safe test commands.
 
 ## 9. Current next steps
 
-1. **Phase 13V final** — Start a fresh PowerShell window, launch `inboxtelegramlisten`, verify the hardened watcher starts cleanly and survives a restart. Mark 13V complete once verified.
-2. **Phase 13X** — Design and implement a safe sort-all batch loop (natural language → Telegram-controlled batch queue).
-3. Continue through 13Y (UX polish), 13Z (final local MVP), then discuss Phase 14 (permanent delete, nuclear mode) separately.
+1. **Phase 13X** — Design and implement a safe sort-all batch loop (natural language → Telegram-controlled batch queue). Consider cleanup/archive of `.bak` and backup snapshot files before starting.
+2. Continue through 13Y (UX polish), 13Z (final local MVP), then discuss Phase 14 (permanent delete, nuclear mode) separately.
 
 **Do not jump ahead to Phase 14 without Ryan explicitly initiating it.**
 

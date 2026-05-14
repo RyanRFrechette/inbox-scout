@@ -195,8 +195,10 @@ Status: COMPLETE
 "what did you move", "what still needs review", "status" all work correctly in Telegram.
 
 ## Phase 13V - Telegram watcher hardening
-Status: PAUSED — live Telegram test passed, clean restart verification still needed.
-Hardened launcher and self-protection logic written. One final startup verification required.
+Status: COMPLETE
+Completed: 2026-05-14
+Hardened launcher and self-protection logic written and fully verified.
+Fresh-window startup passed. Atlas responded to ping. Clean stop and restart confirmed. No stale lock errors.
 
 ## Phase 13W - natural_intent.py cleanup (code quality)
 Status: COMPLETE
@@ -210,7 +212,6 @@ Tests: py_compile OK, import OK.
 
 ## Planned phases (not yet started)
 
-- Phase 13V final: one clean startup/restart verification
 - Phase 13X: Sort all as safe batch loop
 - Phase 13Y: Natural UX polish
 - Phase 13Z: Final local MVP

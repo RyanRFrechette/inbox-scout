@@ -3343,6 +3343,47 @@ Phase 13W - continue MVP loop polish:
 
 ---
 
+## Phase 13V COMPLETE - Telegram watcher hardening
+
+Completed: 2026-05-14
+
+Final verification:
+- Started hardened watcher from a fresh PowerShell window using the launcher script.
+- Watcher started cleanly using project .venv Python only.
+- Atlas responded to ping through Telegram.
+- Watcher stopped cleanly with Ctrl+C.
+- Watcher restarted cleanly — no stale lock error, no already-running error.
+- Single-instance lock (port 47631) released and reacquired correctly.
+
+Confirmed working:
+- Start-InboxScoutTelegramWatcher.ps1 refuses global Python fallback.
+- telegram_watch.py self-protection logic works correctly.
+- Single-instance lock acquires on start and releases cleanly on stop.
+- No duplicate watcher processes on restart.
+- No replay of already-processed Telegram messages.
+
+Files touched: none (verification only)
+No source code changes.
+No config changes.
+No token, credential, or .env changes.
+No data, queue, or log edits.
+No Gmail actions were run.
+
+Safety:
+- Gmail changes: 0
+- Archived emails: 0
+- Moved to Trash: 0
+- Marked read: 0
+- Permanent deletes: 0
+- Replies sent: 0
+
+Next recommended phase:
+Phase 13X - Sort-all as a safe batch loop.
+Consider cleanup/archive of .bak and backup snapshot files before starting 13X.
+
+
+---
+
 ## Phase 13W COMPLETE - natural_intent.py cleanup
 
 Completed: 2026-05-13
