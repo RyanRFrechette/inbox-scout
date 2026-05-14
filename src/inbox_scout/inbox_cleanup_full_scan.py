@@ -7,7 +7,7 @@ from inbox_scout.review_queue import build_queue_items, save_queue
 from inbox_scout.inbox_cleanup_plan import build_inbox_cleanup_plan_message
 
 
-MAX_CLEANUP_BATCHES = 200  # safety cap: 200 * 5 = 1000 emails max
+MAX_CLEANUP_BATCHES = 1000  # safety cap: 1000 * 5 = 5000 emails max
 BATCH_SIZE = 5
 
 
