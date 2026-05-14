@@ -1,6 +1,6 @@
 ﻿# Inbox Scout - Project State
 
-Last updated: 2026-05-07
+Last updated: 2026-05-13
 
 ## Current location
 C:\Users\ryanr\inbox-scout
@@ -3339,4 +3339,42 @@ Phase 13W - continue MVP loop polish:
 - move safe junk to Gmail Trash for review
 - summarize what moved
 - keep everything approval-gated
+
+
+---
+
+## Phase 13W COMPLETE - natural_intent.py cleanup
+
+Completed: 2026-05-13
+Commit: a29f572
+
+Change:
+- Removed duplicate unreachable handler blocks from src/inbox_scout/natural_intent.py.
+- The archive runner, archive gate, archive confirmation, trash runner, trash gate, trash confirmation, trash plan, archive plan, and review plan handler blocks were each present 4 times inside handle_natural_message().
+- Because Python if/return chains short-circuit at the first match, all copies after the first were completely unreachable dead code.
+- Removed 3 duplicate sets (194 lines deleted).
+- Behavior is unchanged.
+
+Tests passed:
+- py_compile OK
+- natural_intent import OK (PYTHONPATH=src)
+
+Files touched:
+- src/inbox_scout/natural_intent.py (only)
+
+Files NOT touched:
+- No Gmail runner files
+- No config files
+- No Telegram config
+- No .env, tokens, credentials, data folders, queue files
+
+Gmail changes: 0
+Permanent deletes: 0
+Replies sent: 0
+
+Next recommended step:
+- Create or update CLAUDE.md project memory file.
+- Then consider archive/ folder structure cleanup for .bak and snapshot files.
+- Then continue toward MVP loop: sort X emails -> plan -> approve -> Trash -> summarize.
+- Phase 14 permanent delete stays disabled until explicitly enabled with nuclear confirmation.
 
