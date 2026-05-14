@@ -4,6 +4,19 @@ Last updated: 2026-05-14 (Phase 13Z inbox cleanup MVP implemented — live test 
 
 ---
 
+## Token-Efficient Claude Code Workflow
+
+1. Read only files directly relevant to the requested task. Do not scan the whole repo unless asked or blocked.
+2. Before editing, state the smallest plan possible — one sentence.
+3. Make small commits by phase. Stop after the requested task is complete.
+4. Keep output short. Return only: files changed, tests run, commit hash if committed, git status, next action.
+5. Avoid long explanations, repeated summaries, or large pasted logs.
+6. For bugs, inspect the exact failing file first, then expand only if needed.
+7. Prefer one-liner PowerShell commands. Avoid multi-line paste blocks.
+8. Never touch Gmail write actions, tokens, credentials, .env, config, queue files, logs, or data unless explicitly authorized. If a task risks Gmail writes, stop and state what would be touched before continuing.
+
+---
+
 ## 1. What Inbox Scout does
 
 Inbox Scout is a personal Gmail inbox manager that:
