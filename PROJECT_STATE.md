@@ -1,6 +1,6 @@
 ﻿# Inbox Scout - Project State
 
-Last updated: 2026-05-14 (Phase 13X)
+Last updated: 2026-05-14 (continuation cursor fix — pre-Phase 13Y)
 
 ## Current location
 C:\Users\ryanr\inbox-scout
@@ -3516,7 +3516,7 @@ Permanent deletes: 0
 Replies sent: 0
 
 Next recommended phase:
-Fix continuation cursor before Phase 13Y. See section below.
+Continuation cursor fix is COMPLETE (commit 29580b2). Ready for Phase 13Y.
 
 
 ---
@@ -3585,19 +3585,59 @@ Root cause:
 - Since the 5 scanned emails are not archived, marked read, or moved, they remain the first 5 unread inbox results
 - Every subsequent "continue sorting" → "yes" would re-fetch and re-queue the same 5 emails
 
-Code evidence:
-- fetch_report_emails() in report_mode.py: no --page-token argument, no cursor file, always starts fresh
-- sort_scan_queue_runner.py run_command(): builds report_args from plan only, no cursor lookup
-- sort_scan_queue_plan.py: ScanQueuePlan dataclass has no page_token field
+Status: FIXED — see section below.
 
-Required fix (2–3 files):
-1. report_mode.py: add --page-token TOKEN argument; use it as initial pageToken in fetch_report_emails(); save nextPageToken to data/plans/latest_gmail_scan_cursor.json after each batch
-2. sort_scan_queue_runner.py: before building report_args, read cursor file if it exists; append --page-token TOKEN to report_args if present
-3. (Optional) sort_scan_queue_plan.py: add page_token field to ScanQueuePlan for transparency
+---
 
-When to clear the cursor: when the user starts a fresh non-continuation sort (sort N emails, not "continue sorting"), or when the cursor is too old. sort_all: False plans should always ignore the cursor.
+## Continuation cursor fix
 
-Recommended timing: fix BEFORE Phase 13Y. Without a working cursor, the continuation prompt is misleading and 13Y UX polish would be built on broken behavior.
+Completed: 2026-05-14
+Commit: 29580b2 — fix: add Gmail cursor support for sort continuation batches
 
-Next recommended phase:
-Fix continuation cursor (2-3 file change), then Phase 13Y - Natural UX polish.
+### What changed
+
+1. **report_mode.py** — Added `--page-token` argument and `initial_page_token` parameter to `fetch_report_emails()`. After each batch, saves the Gmail `nextPageToken` to `data/plans/latest_gmail_scan_cursor.json` via new `save_scan_cursor()`. Returns `(emails, next_page_token)` tuple.
+
+2. **sort_scan_queue_runner.py** — Added `LATEST_GMAIL_SCAN_CURSOR` constant and `load_cursor()` function. For continuation plans (`is_continuation=True`), reads the saved cursor and extends `report_args` with `--page-token TOKEN`. If no cursor token, starts from first page with a log note.
+
+3. **sort_scan_queue_plan.py** — Added `is_continuation: bool` field to `ScanQueuePlan` dataclass. `build_scan_queue_plan()` now accepts `continuation: bool = False` parameter.
+
+4. **sort_scan_queue_approval.py** — Added early return for exhausted cursor: if cursor file exists and `next_page_token` is null/empty, returns "inbox looks fully sorted" without running a new scan. After successful run, reads cursor to show dynamic continuation vs. done message.
+
+5. **natural_intent.py** — Continuation phrase dispatch now calls `sort_plan_message("sort all", continuation=True)`. Updated `sort_plan_message()` signature and messaging to distinguish fresh vs. continuation plans.
+
+### Behavior after fix
+
+- "sort all" = fresh start, cursor ignored even if one exists
+- "continue sorting" / "sort more" / "next batch" / "keep sorting" = use saved cursor token to fetch the next Gmail page
+- If no cursor token saved yet, falls back to first page with log note
+- After a batch where Gmail has no more pages (null nextPageToken), Atlas says "Your inbox looks fully sorted for now" and stops
+- Subsequent "continue sorting" attempts with an exhausted cursor return the "fully sorted" message without scanning
+
+### Cursor file location
+
+data/plans/latest_gmail_scan_cursor.json
+Format:
+{
+  "created_at": "ISO timestamp",
+  "next_page_token": "TOKEN or null",
+  "unread_only": true,
+  "batch_limit": 5,
+  "source": "report_mode"
+}
+
+### Files changed
+
+- src/inbox_scout/report_mode.py
+- src/inbox_scout/sort_scan_queue_runner.py
+- src/inbox_scout/sort_scan_queue_plan.py
+- src/inbox_scout/sort_scan_queue_approval.py
+- src/inbox_scout/natural_intent.py
+
+Gmail changes: 0
+Permanent deletes: 0
+No config/token/credential/data files touched.
+
+Tests: py_compile OK (all 5 files), import OK, local logic checks passed ("sort all" shows fresh plan, "continue sorting" shows continuation plan with "from where the last batch left off").
+
+Next recommended phase: Phase 13Y — Natural UX polish.

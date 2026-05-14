@@ -28,11 +28,15 @@ $env:PYTHONPATH = "src"
 .venv\Scripts\python.exe -m inbox_scout.natural_intent "sort 25 emails"
 .venv\Scripts\python.exe -m inbox_scout.natural_intent "sort all"
 
-# Continuation phrases (should all show the same safe batch plan, not execute)
+# Continuation phrases — should show "from where the last batch left off" and "next safe batch"
+# (local logic only, does not touch Gmail, uses saved cursor if present)
 .venv\Scripts\python.exe -m inbox_scout.natural_intent "continue sorting"
 .venv\Scripts\python.exe -m inbox_scout.natural_intent "sort more"
 .venv\Scripts\python.exe -m inbox_scout.natural_intent "next batch"
 .venv\Scripts\python.exe -m inbox_scout.natural_intent "keep sorting"
+
+# Check saved Gmail cursor (read-only, safe to run any time)
+Get-Content data\plans\latest_gmail_scan_cursor.json
 
 # "next" alone should route to next review item, NOT to continuation
 .venv\Scripts\python.exe -m inbox_scout.natural_intent "next"
