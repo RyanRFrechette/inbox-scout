@@ -97,6 +97,7 @@ def validate_plan(plan: dict[str, Any]) -> tuple[bool, list[str]]:
 def run_command(args: list[str]) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["PYTHONPATH"] = str(PROJECT_ROOT / "src")
+    env["PYTHONUTF8"] = "1"
 
     return subprocess.run(
         args,
