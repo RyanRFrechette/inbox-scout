@@ -107,12 +107,7 @@ def evaluate_confirm_gate(command: str) -> str:
         }
         log_confirm_attempt(row)
 
-        return (
-            "Telegram Confirm Gate\n\n"
-            "Cancel received.\n"
-            "No pending Gmail action was executed.\n\n"
-            "No Gmail changes were made."
-        )
+        return "Cancelled. Gmail not touched."
 
     action, queue_id = parse_confirm_command(command)
 
