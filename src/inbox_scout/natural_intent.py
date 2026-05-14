@@ -18,6 +18,7 @@ from inbox_scout.trash_confirmation_plan import build_trash_confirmation_message
 from inbox_scout.trash_execution_gate import build_trash_execution_gate_message
 from inbox_scout.trash_execution_runner import build_trash_runner_message
 from inbox_scout.inbox_cleanup_runner import build_inbox_cleanup_runner_message
+from inbox_scout.cleanup_control import build_cleanup_status_message, build_cancel_cleanup_message
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -181,6 +182,21 @@ def help_message() -> str:
 
 def handle_natural_message(text: str) -> str:
     msg = text.lower().strip()
+    # Cleanup control commands must run before generic "status" matching.
+    if any(phrase in msg for phrase in [
+        "cleanup status",
+        "cleanup progress",
+        "cleaning status",
+    ]):
+        return build_cleanup_status_message()
+
+    if any(phrase in msg for phrase in [
+        "cancel cleanup",
+        "stop cleanup",
+        "pause cleanup",
+    ]):
+        return build_cancel_cleanup_message()
+
 
     if msg in {"yes", "y", "approve", "go ahead", "run it", "do it", "start scan", "run the scan", "proceed"}:
         return build_scan_approval_response(text)
@@ -331,6 +347,27 @@ def handle_natural_message(text: str) -> str:
 
     if any(phrase in msg for phrase in ["next", "next review", "needs review", "what needs my attention"]):
         return next_review_item()
+
+    if any(phrase in msg for phrase in [
+        "cleanup status",
+        "cleanup progress",
+        "cleaning status",
+    ]):
+        return build_cleanup_status_message()
+
+    if any(phrase in msg for phrase in [
+        "cancel cleanup",
+        "stop cleanup",
+        "pause cleanup",
+    ]):
+        return build_cancel_cleanup_message()
+
+    if any(phrase in msg for phrase in [
+        "cleanup test 25",
+        "clean my inbox test 25",
+        "test cleanup 25",
+    ]):
+        return sort_plan_message(text, cleanup=True)
 
     if any(phrase in msg for phrase in [
         "clean my inbox",
