@@ -312,7 +312,29 @@ Tests: py_compile OK, import OK, all phrase routing checks passed locally.
 
 ---
 
+## Phase 13Z-A/B/C — Cleanup hardening + duplicate watcher fix + live MVP test
+Status: COMPLETE (code + live Telegram test)
+Commits: c0cdf47 (harden cleanup test progress/watcher errors), 6e02ca1 (prevent duplicate watchers) — 2026-05-14
+
+### Changes
+- Hardened cleanup test progress tracking and watcher error handling.
+- Fixed duplicate Telegram watcher: self-protection lock prevents two watcher instances from running simultaneously.
+- Cleanup test cap enforced: scans up to 25 unread emails only.
+
+### Phase 13Z-C live Telegram test — PASSED
+Tested: 2026-05-14
+
+- "clean my inbox" → scan plan shown ✓
+- "yes" → 25 emails scanned across 5 batches, cap enforced ✓
+- cleanup status → stopped_by_cap, scanned 25, batches 5, cap 25, progress 100% ✓
+- cleanup plan → 17 protected, 0 needs review, 8 trash candidates ✓
+- "move trash" → moved exactly those 8 candidates to Gmail Trash ✓
+- Nothing permanently deleted ✓
+- Duplicate watcher issue fixed and verified ✓
+
+---
+
 ## Planned phases (not yet started)
 
-- Phase 13Z live Telegram test: "clean my inbox" → "yes" → "move trash"
 - Phase 14: Permanent delete mode (nuclear, disabled until explicitly enabled)
+- Portfolio/cloud deployment planning

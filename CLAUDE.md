@@ -1,6 +1,6 @@
 # Inbox Scout - CLAUDE.md
 
-Last updated: 2026-05-14 (Phase 13Z inbox cleanup MVP implemented — live test needed)
+Last updated: 2026-05-14 (Phase 13Z-C live MVP test passed)
 
 ---
 
@@ -33,9 +33,18 @@ The Telegram bot ("Atlas") allows Ryan to run inbox operations from his phone wi
 ## 2. Current phase / status
 
 **Current branch:** master
-**Last commit:** `d6c295f` — feat: add Phase 13Z inbox cleanup MVP flow (2026-05-14)
+**Last commit:** `6e02ca1` — fix: prevent duplicate telegram watchers (2026-05-14)
 
-**Phase 13Z — Final local MVP (inbox cleanup flow)** is the most recently completed phase (2026-05-14):
+**Phase 13Z-C — Live MVP test passed (2026-05-14):**
+- "clean my inbox" → 25-email read-only scan across 5 batches (cap enforced) ✓
+- cleanup status → `stopped_by_cap`, scanned 25, batches 5, cap 25, progress 100% ✓
+- cleanup plan → 17 protected, 0 needs review, 8 trash candidates ✓
+- "move trash" → moved exactly those 8 candidates to Gmail Trash ✓
+- Nothing permanently deleted ✓
+- Duplicate Telegram watcher issue fixed (6e02ca1) ✓
+- Key commits: `d6c295f` (Phase 13Z code), `c0cdf47` (harden progress/watcher), `6e02ca1` (duplicate watcher fix)
+
+**Phase 13Z — Final local MVP (inbox cleanup flow)** was implemented prior (2026-05-14):
 - "clean my inbox" / "cleanup my inbox" / "clean inbox" / "sort all and move trash" → read-only scan + builds local cleanup plan
 - "yes" → runs 5-email batch scan, then auto-builds cleanup plan with safe trash candidates
 - "move trash" → moves only safe trash candidates to Gmail Trash (gated by cleanup plan)
@@ -43,7 +52,6 @@ The Telegram bot ("Atlas") allows Ryan to run inbox operations from his phone wi
 - Safety: category must be newsletter/promotion, risk ≤ 30, not protected_review, not manual_review
 - Uses "move trash" command as explicit authorization gate (no config flag needed)
 - Commit: `d6c295f`
-- **Live Telegram test still needed** (code tested locally, not yet tested through Telegram)
 
 **Phase 13Y — Natural UX polish** was completed prior (2026-05-14):
 - All Telegram responses shortened and decluttered
@@ -101,10 +109,10 @@ The Telegram bot ("Atlas") allows Ryan to run inbox operations from his phone wi
 **Phase 13W** was completed prior (2026-05-13):
 - Cleaned up `natural_intent.py` — removed 194 lines of dead/duplicate code
 
-**Current safety mode:** READ-ONLY ONLY (see PROJECT_STATE.md for flag details)
+**Current safety mode:** READ-ONLY for scan. Gmail Trash via "move trash" only (gated — requires prior cleanup plan).
 
 **Next planned steps (in order):**
-1. Phase 13Z live Telegram test — "clean my inbox" → "yes" → "move trash" flow
+1. Portfolio/cloud deployment planning
 2. Phase 14 — Permanent delete mode (nuclear, disabled until explicitly enabled)
 
 ---

@@ -1,6 +1,6 @@
 ﻿# Inbox Scout - Project State
 
-Last updated: 2026-05-14 (Phase 13Z inbox cleanup MVP implemented)
+Last updated: 2026-05-14 (Phase 13Z-C live MVP test passed)
 
 ## Current location
 C:\Users\ryanr\inbox-scout
@@ -3754,11 +3754,25 @@ Implement a one-command cleanup flow: "clean my inbox" → read-only scan → bu
 Gmail changes: 0 (during local testing)
 Permanent deletes: 0
 
-### Live Telegram test (Ryan to run)
+### Live Telegram test — PASSED (2026-05-14)
 
-Send to Atlas in order:
-1. `clean my inbox` → expect: scan plan with "Read-only. No Gmail changes." and "Reply yes to scan"
-2. `yes` → expect: scan completes, cleanup plan shown with trash candidate list and "Say move trash"
-3. Review the candidates listed — confirm they look safe
-4. `move trash` → expect: candidates moved to Gmail Trash (NOT permanently deleted), count shown
-5. Check Gmail Trash folder to confirm emails arrived and can be restored
+Full end-to-end cleanup flow verified through Telegram:
+
+- "clean my inbox" → scan plan shown, "Read-only. No Gmail changes." ✓
+- "yes" → 25 emails scanned across 5 batches, cap enforced ✓
+- cleanup status → `stopped_by_cap`, scanned 25, batches 5, cap 25, progress 100% ✓
+- cleanup plan → 17 protected, 0 needs review, 8 trash candidates ✓
+- "move trash" → moved exactly those 8 candidates to Gmail Trash ✓
+- Nothing permanently deleted ✓
+
+---
+
+## Phase 13Z-A — Cleanup hardening + duplicate watcher fix
+Status: COMPLETE
+Commits: c0cdf47, 6e02ca1 — 2026-05-14
+
+- Hardened cleanup test progress tracking and watcher error handling (c0cdf47).
+- Fixed duplicate Telegram watcher: self-protection lock prevents two simultaneous instances (6e02ca1).
+- Cleanup test cap: scans up to 25 unread emails maximum.
+- Tests: py_compile OK, import OK.
+- No Gmail write actions. No config/token/data files touched.
