@@ -17,6 +17,7 @@ from inbox_scout.trash_candidate_plan import build_trash_plan_message
 from inbox_scout.trash_confirmation_plan import build_trash_confirmation_message
 from inbox_scout.trash_execution_gate import build_trash_execution_gate_message
 from inbox_scout.trash_execution_runner import build_trash_runner_message
+from inbox_scout.inbox_cleanup_runner import build_inbox_cleanup_runner_message
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -50,8 +51,8 @@ def load_queue_items() -> list[dict[str, Any]]:
     return []
 
 
-def sort_plan_message(text: str, continuation: bool = False) -> str:
-    plan = build_scan_queue_plan(text, continuation=continuation)
+def sort_plan_message(text: str, continuation: bool = False, cleanup: bool = False) -> str:
+    plan = build_scan_queue_plan(text, continuation=continuation, cleanup_mode=cleanup)
     save_plan(plan)
 
     if plan.workflow_mode == "blocked_phase_14_only":
@@ -74,6 +75,14 @@ def sort_plan_message(text: str, continuation: bool = False) -> str:
                 "Say continue sorting again after this batch to advance.\n\n"
                 "Read-only. No Gmail changes.\n\n"
                 "Reply yes to scan this batch, or cancel to stop."
+            )
+        if plan.cleanup_mode:
+            return (
+                "I will scan your unread inbox in a read-only batch of 5.\n"
+                "After scanning, I will build a local trash plan.\n"
+                "I will not move anything until you say move trash.\n\n"
+                "Read-only. No Gmail changes.\n\n"
+                "Reply yes to scan, or cancel to stop."
             )
         return (
             "I will scan the first 5 unread emails and build a review queue.\n"
@@ -321,6 +330,22 @@ def handle_natural_message(text: str) -> str:
 
     if any(phrase in msg for phrase in ["next", "next review", "needs review", "what needs my attention"]):
         return next_review_item()
+
+    if any(phrase in msg for phrase in [
+        "clean my inbox",
+        "cleanup my inbox",
+        "clean inbox",
+        "sort all and move trash",
+        "sort and move trash",
+    ]):
+        return sort_plan_message(text, cleanup=True)
+
+    if any(phrase in msg for phrase in [
+        "move trash",
+        "move the trash",
+        "send trash to trash",
+    ]):
+        return build_inbox_cleanup_runner_message()
 
     if any(phrase in msg for phrase in [
         "sort",

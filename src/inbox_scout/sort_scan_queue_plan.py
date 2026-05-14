@@ -23,6 +23,7 @@ class ScanQueuePlan:
     requested_limit: int | None
     sort_all: bool
     is_continuation: bool
+    cleanup_mode: bool
     target: str
     workflow_mode: str
     report_command: str | None
@@ -42,7 +43,7 @@ def make_plan_id() -> str:
     return datetime.now(timezone.utc).strftime("scanqueue_%Y%m%d_%H%M%S")
 
 
-def build_scan_queue_plan(message: str, continuation: bool = False) -> ScanQueuePlan:
+def build_scan_queue_plan(message: str, continuation: bool = False, cleanup_mode: bool = False) -> ScanQueuePlan:
     parsed = parse_sort_command(message)
 
     safety_notes = [
@@ -64,7 +65,7 @@ def build_scan_queue_plan(message: str, continuation: bool = False) -> ScanQueue
         workflow_mode = "unknown"
         safety_notes.append("Could not build a scan plan from this message.")
 
-    elif parsed.sort_all:
+    elif parsed.sort_all or cleanup_mode:
         workflow_mode = "commands_planned"
         effective_limit = 5
         page_size = 5
@@ -75,7 +76,10 @@ def build_scan_queue_plan(message: str, continuation: bool = False) -> ScanQueue
         queue_command = (
             '.\\.venv\\Scripts\\python.exe -m inbox_scout.review_queue --from-latest-report'
         )
-        safety_notes.append("Sort-all runs in safe batches of 5. Say 'continue sorting' after each batch.")
+        if cleanup_mode:
+            safety_notes.append("Cleanup mode: builds trash plan after scan. No Gmail changes during scan.")
+        else:
+            safety_notes.append("Sort-all runs in safe batches of 5. Say 'continue sorting' after each batch.")
         safety_notes.append("Review queue command is local-only and makes no Gmail changes.")
 
     else:
@@ -100,8 +104,9 @@ def build_scan_queue_plan(message: str, continuation: bool = False) -> ScanQueue
         original_message=message,
         parsed_intent=parsed.intent,
         requested_limit=effective_limit,
-        sort_all=parsed.sort_all,
+        sort_all=parsed.sort_all or cleanup_mode,
         is_continuation=continuation,
+        cleanup_mode=cleanup_mode,
         target=parsed.target,
         workflow_mode=workflow_mode,
         report_command=report_command,

@@ -126,8 +126,20 @@ def build_scan_approval_response(_: str = "") -> str:
     protected = find_count("Protected/manual review", queue_output)
     pending = find_count("Pending low-risk review", queue_output)
 
+    is_cleanup = plan.get("cleanup_mode") is True
     is_sort_all = plan.get("sort_all") is True
     limit = plan.get("requested_limit") or 5
+
+    base = (
+        f"Done. Scanned {limit} unread emails.\n\n"
+        f"Total: {total} | Protected: {protected} | Pending: {pending}\n\n"
+        "Read-only. No Gmail changes."
+    )
+
+    if is_cleanup:
+        from inbox_scout.inbox_cleanup_plan import build_inbox_cleanup_plan_message
+        cleanup_msg = build_inbox_cleanup_plan_message()
+        return base + "\n\n" + cleanup_msg
 
     if is_sort_all:
         cursor = load_json(LATEST_GMAIL_SCAN_CURSOR)
@@ -144,12 +156,7 @@ def build_scan_approval_response(_: str = "") -> str:
     else:
         continuation = "\n\nSay queue to see this batch. Say next to review an item."
 
-    return (
-        f"Done. Scanned {limit} unread emails.\n\n"
-        f"Total: {total} | Protected: {protected} | Pending: {pending}\n\n"
-        "Read-only. No Gmail changes."
-        f"{continuation}"
-    )
+    return base + continuation
 
 
 def main() -> None:
