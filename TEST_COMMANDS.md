@@ -60,6 +60,21 @@ Get-Content data\plans\latest_gmail_scan_cursor.json
 .venv\Scripts\python.exe -m inbox_scout.natural_intent "status"
 .venv\Scripts\python.exe -m inbox_scout.natural_intent "what did you move"
 .venv\Scripts\python.exe -m inbox_scout.natural_intent "what still needs review"
+
+# Cleanup flow — Phase 13Z (scan phrases are read-only; "move trash" CHANGES GMAIL)
+# Step 1: show cleanup scan plan (read-only, local logic only)
+.venv\Scripts\python.exe -m inbox_scout.natural_intent "clean my inbox"
+.venv\Scripts\python.exe -m inbox_scout.natural_intent "sort all and move trash"
+
+# Step 2: "yes" would trigger a real Gmail scan (safe but uses API quota)
+# Step 3: "move trash" CHANGES GMAIL — only run after reviewing cleanup plan output
+# .venv\Scripts\python.exe -m inbox_scout.natural_intent "move trash"
+
+# Verify "move trash" without prior cleanup plan (should block safely)
+.venv\Scripts\python.exe -m inbox_scout.natural_intent "move trash"
+
+# Verify routing safety: "sort all and move trash" must NOT route to runner (must route to scanner)
+.venv\Scripts\python.exe -m inbox_scout.natural_intent "sort all and move trash"
 ```
 
 ---

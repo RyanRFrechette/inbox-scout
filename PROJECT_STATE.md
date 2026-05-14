@@ -1,19 +1,21 @@
 ﻿# Inbox Scout - Project State
 
-Last updated: 2026-05-14 (continuation cursor fix — pre-Phase 13Y)
+Last updated: 2026-05-14 (Phase 13Z inbox cleanup MVP implemented)
 
 ## Current location
 C:\Users\ryanr\inbox-scout
 
 ## Current safety mode
-READ-ONLY ONLY
+READ-ONLY for scan. Gmail Trash via "move trash" command only (gated — requires prior cleanup plan).
 
 Inbox Scout currently does NOT:
 - Archive emails
-- Delete emails
+- Delete emails (permanently)
 - Apply Gmail labels
 - Send replies
-- Modify Gmail in any way
+
+Inbox Scout CAN (with explicit confirmation):
+- Move safe trash candidates to Gmail Trash via "move trash" command (Phase 13Z)
 
 ## Completed phases
 
@@ -3705,3 +3707,58 @@ Gmail changes: 0
 Permanent deletes: 0
 
 Next recommended phase: Phase 13Z — Final local MVP.
+
+---
+
+## Phase 13Z — Final local MVP (inbox cleanup flow)
+
+Status: COMPLETE (code). Live Telegram test pending.
+Commit: d6c295f — 2026-05-14
+
+### Goal
+
+Implement a one-command cleanup flow: "clean my inbox" → read-only scan → builds local trash candidate plan → "move trash" → moves only safe candidates to Gmail Trash.
+
+### New files
+
+- **inbox_cleanup_plan.py**: Reads current queue, applies safety filter (is_safe_trash_candidate), builds and saves `latest_inbox_cleanup_plan.json`. Returns formatted message listing candidates with "Say move trash" prompt.
+
+- **inbox_cleanup_runner.py**: Reads cleanup plan (age-checked, 120-min limit), re-validates candidates against live queue, calls Gmail Trash API for each valid candidate. Logs to `trash_execution_runs.jsonl`. Imports safety utilities from `trash_execution_runner.py` to avoid duplication.
+
+### Modified files
+
+- **sort_scan_queue_plan.py**: Added `cleanup_mode: bool` field to `ScanQueuePlan` dataclass. Added `cleanup_mode: bool = False` parameter to `build_scan_queue_plan()`. When `cleanup_mode=True`, forces sort_all behavior (limit=5).
+
+- **sort_scan_queue_approval.py**: After successful scan, checks `is_cleanup = plan.get("cleanup_mode") is True`. If cleanup mode, calls `build_inbox_cleanup_plan_message()` and appends to scan result. Existing sort_all/continuation logic preserved for non-cleanup scans.
+
+- **natural_intent.py**: Added import for `build_inbox_cleanup_runner_message`. Added `cleanup: bool = False` parameter to `sort_plan_message()`. Added cleanup explanation branch for cleanup mode. Added routes for cleanup scan phrases (checked BEFORE move-trash — order matters, "sort all and move trash" contains "move trash" as substring). Added "move trash" route calling `build_inbox_cleanup_runner_message()`.
+
+### Safety design
+
+- "move trash" command is the explicit authorization gate. No config flag needed.
+- Cleanup plan must be present and < 120 minutes old to run.
+- Each candidate re-validated at runtime: category newsletter/promotion only, risk ≤ 30, not protected_review, not manual_review, no protected terms.
+- Logs all actions to TRASH_EXECUTION_LOG (trash_execution_runs.jsonl).
+- Permanent delete disabled at all levels.
+
+### Tests passed (local)
+
+- py_compile OK: inbox_cleanup_plan.py, inbox_cleanup_runner.py, sort_scan_queue_plan.py, sort_scan_queue_approval.py, natural_intent.py
+- import OK: all 5 modules
+- "clean my inbox" → cleanup scan explanation (read-only) ✓
+- "sort all and move trash" → cleanup scan (NOT runner — routing order verified) ✓
+- "move trash" without plan → "No cleanup plan found. Say clean my inbox first. Gmail not touched." ✓
+- "empty my trash" → "Permanent delete is disabled. Phase 14 nuclear feature." ✓
+- "status" → compact status ✓
+
+Gmail changes: 0 (during local testing)
+Permanent deletes: 0
+
+### Live Telegram test (Ryan to run)
+
+Send to Atlas in order:
+1. `clean my inbox` → expect: scan plan with "Read-only. No Gmail changes." and "Reply yes to scan"
+2. `yes` → expect: scan completes, cleanup plan shown with trash candidate list and "Say move trash"
+3. Review the candidates listed — confirm they look safe
+4. `move trash` → expect: candidates moved to Gmail Trash (NOT permanently deleted), count shown
+5. Check Gmail Trash folder to confirm emails arrived and can be restored

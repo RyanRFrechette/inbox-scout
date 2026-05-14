@@ -300,7 +300,19 @@ No Gmail write actions. No archive/trash/mark-read/delete. Permanent delete disa
 
 ---
 
+## Phase 13Z — Final local MVP (inbox cleanup flow)
+Status: COMPLETE (code), live Telegram test needed
+Commit: d6c295f — 2026-05-14
+One-command cleanup flow: "clean my inbox" → read-only scan → builds local trash candidate plan → "move trash" → moves only safe candidates to Gmail Trash.
+Two new files: inbox_cleanup_plan.py, inbox_cleanup_runner.py.
+Three modified: sort_scan_queue_plan.py (cleanup_mode field), sort_scan_queue_approval.py (auto-builds plan after scan), natural_intent.py (routes cleanup phrases, move trash command).
+Safety: category newsletter/promotion only, risk ≤ 30, not protected/manual-review, plan age-checked (120 min), re-validated at run time.
+No Gmail write actions during local testing. Move trash IS wired to Gmail Trash API — live test required.
+Tests: py_compile OK, import OK, all phrase routing checks passed locally.
+
+---
+
 ## Planned phases (not yet started)
 
-- Phase 13Z: Final local MVP
+- Phase 13Z live Telegram test: "clean my inbox" → "yes" → "move trash"
 - Phase 14: Permanent delete mode (nuclear, disabled until explicitly enabled)

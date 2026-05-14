@@ -1,6 +1,6 @@
 # Inbox Scout - CLAUDE.md
 
-Last updated: 2026-05-14 (Phase 13Y live smoke test passed — ready for Phase 13Z)
+Last updated: 2026-05-14 (Phase 13Z inbox cleanup MVP implemented — live test needed)
 
 ---
 
@@ -20,9 +20,19 @@ The Telegram bot ("Atlas") allows Ryan to run inbox operations from his phone wi
 ## 2. Current phase / status
 
 **Current branch:** master
-**Last commit:** `32358df` — polish: simplify Telegram cancel response (2026-05-14)
+**Last commit:** `d6c295f` — feat: add Phase 13Z inbox cleanup MVP flow (2026-05-14)
 
-**Phase 13Y — Natural UX polish** is the most recently completed phase (2026-05-14):
+**Phase 13Z — Final local MVP (inbox cleanup flow)** is the most recently completed phase (2026-05-14):
+- "clean my inbox" / "cleanup my inbox" / "clean inbox" / "sort all and move trash" → read-only scan + builds local cleanup plan
+- "yes" → runs 5-email batch scan, then auto-builds cleanup plan with safe trash candidates
+- "move trash" → moves only safe trash candidates to Gmail Trash (gated by cleanup plan)
+- Two new files: `inbox_cleanup_plan.py`, `inbox_cleanup_runner.py`
+- Safety: category must be newsletter/promotion, risk ≤ 30, not protected_review, not manual_review
+- Uses "move trash" command as explicit authorization gate (no config flag needed)
+- Commit: `d6c295f`
+- **Live Telegram test still needed** (code tested locally, not yet tested through Telegram)
+
+**Phase 13Y — Natural UX polish** was completed prior (2026-05-14):
 - All Telegram responses shortened and decluttered
 - 5-bullet safety checklists replaced with single line: "Read-only. No Gmail changes."
 - 5-line "I did not" footers replaced with: "Gmail not touched."
@@ -81,7 +91,7 @@ The Telegram bot ("Atlas") allows Ryan to run inbox operations from his phone wi
 **Current safety mode:** READ-ONLY ONLY (see PROJECT_STATE.md for flag details)
 
 **Next planned steps (in order):**
-1. Phase 13Z — Final local MVP
+1. Phase 13Z live Telegram test — "clean my inbox" → "yes" → "move trash" flow
 2. Phase 14 — Permanent delete mode (nuclear, disabled until explicitly enabled)
 
 ---
