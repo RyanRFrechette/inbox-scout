@@ -274,8 +274,33 @@ No Gmail write actions. No archive/trash/mark-read/delete. Permanent delete disa
 
 ---
 
+## Phase 13Y — Natural UX polish
+Status: COMPLETE (code + live smoke test)
+Commits: 01090e6 (UX wording), 32358df (cancel fix) — 2026-05-14
+Shortened and decluttered all user-facing Telegram responses.
+5-bullet safety checklists → "Read-only. No Gmail changes."
+5-line "I did not" footers → "Gmail not touched."
+Status message trimmed: removed log counts and verbose headers.
+Cancel response simplified: "Cancelled. Gmail not touched."
+Files changed: natural_intent.py, sort_scan_queue_approval.py, telegram_status.py, telegram_confirm_gate.py.
+No Gmail write actions. No config/token/data files touched.
+Tests: py_compile OK (all changed files), local logic checks passed.
+
+### Phase 13Y live Telegram smoke test — PASSED
+Tested: 2026-05-14
+sort all → compact wording ✓
+yes → compact scan result with "Say continue sorting / queue / next" prompts ✓
+continue sorting → compact cursor wording ✓
+queue → works ✓
+next → works ✓
+status → compact status ✓
+empty my trash → compact Phase 14 disabled message ✓
+sort all → cancel → "Cancelled. Gmail not touched." ✓
+No Gmail write actions. No archive/trash/mark-read/delete. Permanent delete disabled.
+
+---
+
 ## Planned phases (not yet started)
 
-- Phase 13Y: Natural UX polish
 - Phase 13Z: Final local MVP
 - Phase 14: Permanent delete mode (nuclear, disabled until explicitly enabled)

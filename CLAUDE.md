@@ -1,6 +1,6 @@
 # Inbox Scout - CLAUDE.md
 
-Last updated: 2026-05-14 (continuation cursor live test passed — ready for Phase 13Y)
+Last updated: 2026-05-14 (Phase 13Y live smoke test passed — ready for Phase 13Z)
 
 ---
 
@@ -20,9 +20,28 @@ The Telegram bot ("Atlas") allows Ryan to run inbox operations from his phone wi
 ## 2. Current phase / status
 
 **Current branch:** master
-**Last commit:** `29580b2` — fix: add Gmail cursor support for sort continuation batches (2026-05-14)
+**Last commit:** `32358df` — polish: simplify Telegram cancel response (2026-05-14)
 
-**Continuation cursor fix** is the most recently completed work (2026-05-14):
+**Phase 13Y — Natural UX polish** is the most recently completed phase (2026-05-14):
+- All Telegram responses shortened and decluttered
+- 5-bullet safety checklists replaced with single line: "Read-only. No Gmail changes."
+- 5-line "I did not" footers replaced with: "Gmail not touched."
+- Status message trimmed (removed log counts, verbose headers)
+- Cancel response simplified: "Cancelled. Gmail not touched."
+- Commits: `01090e6`, `32358df`
+
+**Phase 13Y live Telegram smoke test passed (2026-05-14):**
+- sort all → compact wording ✓
+- yes → compact scan result with "Say continue sorting / Say queue / Say next" prompts ✓
+- continue sorting → compact cursor wording ✓
+- queue → works ✓
+- next → works ✓
+- status → compact status ✓
+- empty my trash → compact Phase 14 disabled message ✓
+- sort all → cancel → "Cancelled. Gmail not touched." ✓
+- No Gmail write actions. No archive/trash/mark-read/delete. Permanent delete disabled.
+
+**Continuation cursor fix** was completed prior (2026-05-14):
 - "continue sorting" / "sort more" / "next batch" / "keep sorting" now advance to the next Gmail page
 - After each batch, `nextPageToken` is saved to `data/plans/latest_gmail_scan_cursor.json`
 - Runner reads the cursor and passes `--page-token TOKEN` to report_mode for continuation plans
@@ -62,9 +81,8 @@ The Telegram bot ("Atlas") allows Ryan to run inbox operations from his phone wi
 **Current safety mode:** READ-ONLY ONLY (see PROJECT_STATE.md for flag details)
 
 **Next planned steps (in order):**
-1. Phase 13Y — Natural UX polish
-2. Phase 13Z — Final local MVP
-3. Phase 14 — Permanent delete mode (nuclear, disabled until explicitly enabled)
+1. Phase 13Z — Final local MVP
+2. Phase 14 — Permanent delete mode (nuclear, disabled until explicitly enabled)
 
 ---
 

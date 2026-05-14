@@ -3660,4 +3660,48 @@ Gmail changes: 0
 Permanent deletes: 0
 No archive/trash/mark-read/delete/label/send actions.
 
-Next recommended phase: Phase 13Y — Natural UX polish.
+Next recommended phase: Phase 13Y — complete. See section below.
+
+---
+
+## Phase 13Y — Natural UX polish
+
+Completed: 2026-05-14
+Commits: 01090e6 (polish: improve Telegram UX wording), 32358df (polish: simplify Telegram cancel response)
+
+### What changed
+
+All user-facing Telegram response strings shortened and decluttered. No safety logic changed.
+
+- **natural_intent.py**: Removed 5-bullet safety checklists from sort_plan_message(). Condensed to "Read-only. No Gmail changes." Changed "I did not touch Gmail." footers to "Gmail not touched." Simplified sort plan prompts to "Reply yes to scan this batch, or cancel to stop." Shortened cancel, queue-empty, next-item-empty, and unknown-input responses.
+
+- **sort_scan_queue_approval.py**: Replaced 5-line "I did not" footer with "Read-only. No Gmail changes." Condensed success result to single line format "Total: X | Protected: X | Pending: X". Updated continuation prompts to "Say continue sorting for the next 5. / Say queue to see this batch. / Say next to review an item." Simplified failure and exhausted-cursor messages.
+
+- **telegram_status.py**: Removed "Current batch rule" and "Mode" header lines. Removed 4 log-count lines. Replaced 3-line safety footer with "Read-only. No Gmail changes." Condensed moved/review footers.
+
+- **telegram_confirm_gate.py**: Replaced 4-line cancel response ("Telegram Confirm Gate / Cancel received. / No pending Gmail action was executed. / No Gmail changes were made.") with "Cancelled. Gmail not touched."
+
+Files changed: natural_intent.py, sort_scan_queue_approval.py, telegram_status.py, telegram_confirm_gate.py
+Gmail changes: 0
+Permanent deletes: 0
+No config/token/credential/data files touched.
+Tests: py_compile OK (all changed files), local logic checks passed.
+
+### Phase 13Y live Telegram smoke test — PASSED
+
+Tested: 2026-05-14
+
+All 8 phrases confirmed live against Atlas:
+1. sort all → compact wording, "Reply yes to scan this batch, or cancel to stop." ✓
+2. yes → "Done. Scanned 5 unread emails. / Total: X | Protected: X | Pending: X / Read-only. No Gmail changes." ✓
+3. continue sorting → "from where the last batch left off" compact format ✓
+4. queue → batch list ending "Gmail not touched." ✓
+5. next → "Next for review:" format ✓
+6. status → compact "Inbox Scout Status / Queue: X | Needs review: X | Protected: X" format ✓
+7. empty my trash → "Permanent delete is disabled." compact block ✓
+8. sort all → cancel → "Cancelled. Gmail not touched." ✓
+
+Gmail changes: 0
+Permanent deletes: 0
+
+Next recommended phase: Phase 13Z — Final local MVP.
