@@ -248,8 +248,8 @@ Fix required before Phase 13Y: add --page-token to report_mode.py and save nextP
 ---
 
 ## Continuation cursor fix (pre-Phase 13Y)
-Status: COMPLETE
-Commit: 29580b2 — 2026-05-14
+Status: COMPLETE (code + live test)
+Commits: 29580b2 (code), fe5b621 (docs) — 2026-05-14
 Fixed "continue sorting" repeating the same first 5 unread emails every batch.
 Root cause: report_mode.py had no cursor; Gmail API always returns from the beginning without a pageToken.
 Fix: save nextPageToken to data/plans/latest_gmail_scan_cursor.json after each batch.
@@ -259,6 +259,18 @@ Approval layer detects exhausted cursor (null nextPageToken) and stops before re
 Files changed: report_mode.py, sort_scan_queue_runner.py, sort_scan_queue_plan.py, sort_scan_queue_approval.py, natural_intent.py.
 No Gmail write actions. No config/token/data files touched.
 Tests: py_compile OK (all 5 files), import OK, local logic checks passed.
+
+### Continuation cursor live Telegram test — PASSED
+Tested: 2026-05-14
+"continue sorting" → Atlas showed "from where the last batch left off" ✓
+"yes" → scan completed successfully ✓
+Report comparison confirmed different message IDs from the previous repeated batch:
+- 19e2397bcf1ebc1a Anthropic login
+- 19e2392926f4ad6b Cash App login
+- 19e238835b83c4ef Venmo password change
+- 19e237f7ded5c52f ngrok tips
+- 19e219a94e306697 Vans
+No Gmail write actions. No archive/trash/mark-read/delete. Permanent delete disabled.
 
 ---
 

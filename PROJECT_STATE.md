@@ -3640,4 +3640,24 @@ No config/token/credential/data files touched.
 
 Tests: py_compile OK (all 5 files), import OK, local logic checks passed ("sort all" shows fresh plan, "continue sorting" shows continuation plan with "from where the last batch left off").
 
+### Continuation cursor live Telegram test — PASSED
+
+Tested: 2026-05-14
+
+Test flow:
+1. Ryan restarted/reloaded Atlas after continuation cursor fix was committed.
+2. Sent "continue sorting" → Atlas replied "I will scan the next 5 unread emails from where the last batch left off." ✓
+3. Sent "yes" → Atlas completed the scan successfully ✓
+4. PowerShell report comparison confirmed the new batch had different message IDs from the previous repeated batch:
+   - 19e2397bcf1ebc1a — Anthropic login
+   - 19e2392926f4ad6b — Cash App login
+   - 19e238835b83c4ef — Venmo password change
+   - 19e237f7ded5c52f — ngrok tips
+   - 19e219a94e306697 — Vans
+   (Previous repeated batches: inbox_report_20260514_111905.json and inbox_report_20260514_112000.json had the same 5 message IDs. New batch inbox_report_20260514_112316.json had different IDs confirming the cursor advanced correctly.)
+
+Gmail changes: 0
+Permanent deletes: 0
+No archive/trash/mark-read/delete/label/send actions.
+
 Next recommended phase: Phase 13Y — Natural UX polish.

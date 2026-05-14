@@ -1,6 +1,6 @@
 # Inbox Scout - CLAUDE.md
 
-Last updated: 2026-05-14 (continuation cursor fix — pre-Phase 13Y)
+Last updated: 2026-05-14 (continuation cursor live test passed — ready for Phase 13Y)
 
 ---
 
@@ -30,6 +30,17 @@ The Telegram bot ("Atlas") allows Ryan to run inbox operations from his phone wi
 - "sort all" always starts fresh (cursor ignored); continuation phrases use the saved cursor
 - No Gmail write actions. No config changes. No token/credential/data files touched.
 - Commit: `29580b2`
+
+**Continuation cursor live Telegram test passed (2026-05-14):**
+- "continue sorting" → Atlas showed "I will scan the next 5 unread emails from where the last batch left off." ✓
+- "yes" → Atlas completed the scan successfully ✓
+- PowerShell report comparison confirmed different message IDs from previous batch ✓
+  - 19e2397bcf1ebc1a Anthropic login
+  - 19e2392926f4ad6b Cash App login
+  - 19e238835b83c4ef Venmo password change
+  - 19e237f7ded5c52f ngrok tips
+  - 19e219a94e306697 Vans
+- No Gmail write actions. No archive/trash/mark-read/delete. Permanent delete disabled.
 
 **Phase 13X** was completed prior (2026-05-14):
 - "sort all" now runs as a safe controlled batch loop — 5 emails per batch, never unlimited
