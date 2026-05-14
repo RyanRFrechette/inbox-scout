@@ -1,6 +1,6 @@
 ﻿# Inbox Scout - Project State
 
-Last updated: 2026-05-14
+Last updated: 2026-05-14 (Phase 13X)
 
 ## Current location
 C:\Users\ryanr\inbox-scout
@@ -3378,8 +3378,7 @@ Safety:
 - Replies sent: 0
 
 Next recommended phase:
-Phase 13X - Sort-all as a safe batch loop.
-Consider cleanup/archive of .bak and backup snapshot files before starting 13X.
+Phase 13X - Sort-all as a safe batch loop (now complete, see below).
 
 
 ---
@@ -3462,5 +3461,59 @@ Permanent deletes: 0
 Replies sent: 0
 
 Next recommended phase:
-Phase 13X - Sort-all as a safe batch loop.
+Phase 13X complete. See section below.
 
+
+---
+
+## Phase 13X COMPLETE — Safe sort-all batch loop
+
+Completed: 2026-05-14
+Commit: f0dd6e8 — feat: add Phase 13X safe sort-all batch loop
+
+Change:
+- "sort all" now runs as a safe controlled batch loop, not an unlimited Gmail scan.
+- Each batch scans exactly 5 unread inbox emails (MAX_SAFE_RUN_LIMIT = 5 enforced).
+- After each batch Atlas says: "There may be more unread emails. Say 'continue sorting' to process the next safe batch of 5."
+- Two-step approval preserved for every batch: plan → yes → scan.
+
+Continuation phrases added to natural_intent.py:
+- continue sorting
+- sort more
+- next batch
+- keep sorting
+
+All four route to sort_plan_message("sort all"), creating a fresh 5-email batch plan and asking for approval. Block placed before the "next" review handler to avoid the "next batch" routing conflict.
+
+Technical changes:
+- sort_scan_queue_plan.py: sort_all branch changed from blocked_large_scan to commands_planned with effective_limit=5.
+- sort_scan_queue_approval.py: Removed sort_all hard-block. Replaced != 5 check with range check (< 1 or > 5). Success response shows dynamic limit and appends continuation prompt when sort_all=True.
+- sort_scan_queue_runner.py: Removed sort_all hard-block from validate_plan.
+- natural_intent.py: Removed dead blocked_large_scan branch. Added sort_all batch messaging. Added continuation phrase dispatch.
+
+Tests passed:
+- py_compile OK: all 4 files
+- Import OK: all 4 modules
+- "sort all" → batch plan message ✓
+- "continue sorting", "sort more", "next batch", "keep sorting" → batch plan message ✓
+- "next" alone → still routes to next review item ✓
+- "empty my trash", "permanently delete" → still blocked ✓
+- "status", "what can go to trash", "what can be archived" → unchanged ✓
+
+Files changed:
+- src/inbox_scout/sort_scan_queue_plan.py
+- src/inbox_scout/sort_scan_queue_approval.py
+- src/inbox_scout/sort_scan_queue_runner.py
+- src/inbox_scout/natural_intent.py
+
+Files NOT touched:
+- No config, token, credential, or .env files
+- No data, queue, log, or Gmail files
+- No Telegram config
+
+Gmail changes: 0
+Permanent deletes: 0
+Replies sent: 0
+
+Next recommended phase:
+Phase 13Y - Natural UX polish.

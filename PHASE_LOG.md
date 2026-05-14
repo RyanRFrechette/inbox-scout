@@ -215,11 +215,20 @@ Moved 12 backup/snapshot files from src/inbox_scout/ to archive/phase_backups/.
 Git recorded as renames. No source code changed. No Gmail actions. No config/token/data files touched.
 Verification passed: py_compile OK (natural_intent, telegram_watch, trash_execution_runner, report_mode), import OK.
 
+## Phase 13X — Safe sort-all batch loop
+Status: COMPLETE
+Commit: f0dd6e8 — 2026-05-14
+"sort all" now runs as a controlled 5-email batch, not an unlimited scan.
+Continuation phrases added: continue sorting, sort more, next batch, keep sorting.
+After each batch Atlas prompts: "Say 'continue sorting' to process the next safe batch of 5."
+Two-step approval preserved. Removed sort_all hard-blocks from plan, approval, and runner.
+Files changed: sort_scan_queue_plan.py, sort_scan_queue_approval.py, sort_scan_queue_runner.py, natural_intent.py.
+No Gmail write actions. No config/token/data files touched.
+
 ---
 
 ## Planned phases (not yet started)
 
-- Phase 13X: Sort all as safe batch loop
 - Phase 13Y: Natural UX polish
 - Phase 13Z: Final local MVP
 - Phase 14: Permanent delete mode (nuclear, disabled until explicitly enabled)
