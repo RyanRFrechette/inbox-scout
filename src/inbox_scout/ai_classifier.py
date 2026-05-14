@@ -1,18 +1,15 @@
 ﻿import json
 from datetime import datetime
 
-import requests
 from rich.console import Console
 from rich.table import Table
 
 from inbox_scout.rule_classifier import classify_email, load_json, load_lines
 from inbox_scout.inbox_fetcher import fetch_inbox_emails
 from inbox_scout.paths import HISTORY_DIR, PROTECTED_SENDERS_FILE, PROTECTED_TERMS_FILE, RULES_FILE
+from inbox_scout.model_router import classify_with_provider
 
 console = Console()
-
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL = "qwen3:8b"
 
 ALLOWED_CATEGORIES = [
     "Important",
@@ -30,7 +27,7 @@ ALLOWED_CATEGORIES = [
     "Promotion",
     "Junk",
     "Archive candidate",
-    "Manual review"
+    "Manual review",
 ]
 
 REQUIRED_KEYS = [
@@ -39,131 +36,21 @@ REQUIRED_KEYS = [
     "risk_score",
     "reason",
     "suggested_action",
-    "manual_review"
+    "manual_review",
 ]
 
 
-def extract_json(text):
-    start = text.find("{")
-    end = text.rfind("}")
+def classify_with_ai(email, rule_result, batch_size: int = 1):
+    validated = classify_with_provider(email, rule_result, batch_size=batch_size)
 
-    if start == -1 or end == -1:
-        raise ValueError("No JSON object found in model response.")
+    if rule_result.get("manual_review"):
+        validated["category"] = rule_result.get("category", "Manual review")
+        validated["manual_review"] = True
+        validated["risk_score"] = max(validated.get("risk_score", 0), rule_result.get("risk_score", 90))
+        validated["suggested_action"] = "Review manually before taking action."
+        validated["reason"] = "Protected rule category preserved. " + str(validated.get("reason", ""))
 
-    return json.loads(text[start:end + 1])
-
-
-def normalize_score(value, default=50):
-    try:
-        number = float(value)
-
-        if 0 <= number <= 1:
-            number = number * 100
-
-        number = int(round(number))
-
-        if number < 0:
-            return 0
-
-        if number > 100:
-            return 100
-
-        return number
-    except Exception:
-        return default
-
-
-def validate_ai_result(result):
-    for key in REQUIRED_KEYS:
-        if key not in result:
-            raise ValueError(f"Missing required key: {key}")
-
-    category = result.get("category")
-
-    if category not in ALLOWED_CATEGORIES:
-        result["category"] = "Manual review"
-        result["reason"] = f"AI returned unsupported category '{category}'. " + str(result.get("reason", ""))
-        result["manual_review"] = True
-        result["risk_score"] = 90
-
-    result["confidence_score"] = normalize_score(result.get("confidence_score"), default=50)
-    result["risk_score"] = normalize_score(result.get("risk_score"), default=60)
-    result["manual_review"] = bool(result.get("manual_review"))
-
-    return result
-
-
-def classify_with_ai(email, rule_result):
-    prompt = f"""
-You are Inbox Scout, a local-first Gmail cleanup assistant.
-
-Return ONLY valid JSON.
-Do not include markdown.
-Do not explain outside JSON.
-
-Allowed categories:
-{ALLOWED_CATEGORIES}
-
-Required JSON keys:
-category, confidence_score, risk_score, reason, suggested_action, manual_review
-
-Scoring:
-confidence_score must be 0-100.
-risk_score must be 0-100.
-manual_review must be true or false.
-
-Safety rules:
-- Anything financial, legal, medical, tax, password, security, job, interview, client, invoice, family, warranty, refund, return, collection, or account access related must be manual_review true.
-- Never suggest delete.
-- Never suggest auto-send.
-- Never suggest automatic Gmail changes.
-- If unsure, use Manual review.
-
-Rule-based baseline:
-{json.dumps(rule_result, ensure_ascii=False)}
-
-Email:
-From: {email.get("from", "")}
-Subject: {email.get("subject", "")}
-Snippet: {email.get("snippet", "")}
-"""
-
-    payload = {
-        "model": MODEL,
-        "prompt": prompt,
-        "stream": False,
-        "format": "json",
-        "options": {
-            "temperature": 0
-        }
-    }
-
-    try:
-        response = requests.post(OLLAMA_URL, json=payload, timeout=180)
-        response.raise_for_status()
-
-        raw_text = response.json().get("response", "")
-        parsed = extract_json(raw_text)
-        validated = validate_ai_result(parsed)
-
-        if rule_result.get("manual_review"):
-            validated["category"] = rule_result.get("category", "Manual review")
-            validated["manual_review"] = True
-            validated["risk_score"] = max(validated["risk_score"], rule_result.get("risk_score", 90))
-            validated["suggested_action"] = "Review manually before taking action."
-            validated["reason"] = "Protected rule category preserved. " + str(validated.get("reason", ""))
-
-        return validated
-
-    except Exception as error:
-        return {
-            "category": "Manual review",
-            "confidence_score": 0,
-            "risk_score": 100,
-            "reason": f"AI classification failed: {error}",
-            "suggested_action": "Review manually.",
-            "manual_review": True
-        }
+    return validated
 
 
 def run_ai_classifier(limit=25):

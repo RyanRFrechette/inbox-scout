@@ -128,7 +128,7 @@ def classify_for_report(emails):
         rule_result = classify_email(email, rules, protected_terms, protected_senders)
 
         try:
-            ai_result = classify_with_ai(email, rule_result)
+            ai_result = classify_with_ai(email, rule_result, batch_size=total)
         except Exception as e:
             console.print(f"[yellow]AI classifier failed on {index}/{total}; using rule fallback. Error: {e}[/yellow]")
 

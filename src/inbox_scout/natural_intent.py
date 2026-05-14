@@ -22,6 +22,7 @@ from inbox_scout.inbox_cleanup_runner import build_inbox_cleanup_runner_message
 from inbox_scout.cleanup_control import build_cleanup_status_message, build_cancel_cleanup_message
 from inbox_scout.trash_sender_block_plan import build_sender_block_plan_message
 from inbox_scout.trash_sender_block_runner import build_sender_block_runner_message
+from inbox_scout.model_router import get_provider, set_provider, model_status_message
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -191,8 +192,43 @@ def help_message() -> str:
     )
 
 
+def _handle_model_command(msg: str) -> str | None:
+    """Return a response if the message is a /model command, else None."""
+    stripped = msg.lstrip("/").strip()
+    if not stripped.startswith("model"):
+        return None
+    parts = stripped.split()
+    if len(parts) < 2:
+        return model_status_message()
+    subcmd = parts[1]
+    if subcmd == "status":
+        return model_status_message()
+    if subcmd == "local":
+        set_provider("local")
+        return "Switched to local mode (Ollama/qwen3:8b). No cloud API calls."
+    if subcmd == "openrouter":
+        set_provider("openrouter")
+        return "Switched to OpenRouter (google/gemini-2.5-flash-lite). Requires OPENROUTER_API_KEY."
+    if subcmd == "auto":
+        set_provider("auto")
+        return (
+            "Switched to auto mode.\n\n"
+            "Rules:\n"
+            "- Obvious newsletter/promo (risk <=30): no AI\n"
+            "- Small scans (<=10 emails): local\n"
+            "- Mass cleanup (>10 emails): OpenRouter\n"
+            "- Protected/sensitive: manual review always"
+        )
+    return f"Unknown model command: {subcmd}\n\nTry: /model status | /model local | /model openrouter | /model auto"
+
+
 def handle_natural_message(text: str) -> str:
     msg = text.lower().strip()
+
+    model_response = _handle_model_command(msg)
+    if model_response is not None:
+        return model_response
+
     # Cleanup control commands must run before generic "status" matching.
     if any(phrase in msg for phrase in [
         "cleanup status",
