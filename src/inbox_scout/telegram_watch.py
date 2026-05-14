@@ -5,6 +5,7 @@ import io
 import socket
 import sys
 import time
+import traceback
 from datetime import datetime
 from pathlib import Path
 
@@ -83,7 +84,7 @@ def main() -> None:
             break
 
         except Exception as e:
-            log(f"ERROR: {type(e).__name__}: {e}")
+            log(f"ERROR: {type(e).__name__}: {e}\n{traceback.format_exc()}")
             time.sleep(10)
 
     lock_socket.close()
