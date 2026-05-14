@@ -203,6 +203,7 @@ See `TEST_COMMANDS.md` for the full list of safe test commands.
 - **Ask before anything irreversible.** Deleting files, modifying data, moving files, enabling apply mode — always confirm first.
 - **Keep commits tight.** One file changed per commit is ideal. If multiple files must change, explain why in the commit message.
 - **Do not create documentation files unless asked.** Work from conversation context. Exception: CLAUDE.md and explicitly requested docs.
+- **Done chime.** At the end of any long task, run: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\Notify-ClaudeDone.ps1`
 
 ---
 
