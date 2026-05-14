@@ -2,7 +2,10 @@
 
 import contextlib
 import io
+import json
+import os
 import socket
+import subprocess
 import sys
 import time
 import traceback
@@ -23,6 +26,62 @@ def log(message: str) -> None:
     stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with LOG_PATH.open("a", encoding="utf-8") as f:
         f.write(f"[{stamp}] {message}\n")
+
+
+def kill_stale_watchers() -> None:
+    """Kill any telegram_watch processes not running from the project venv Python."""
+    our_pid = os.getpid()
+    venv_python = str((PROJECT_ROOT / ".venv" / "Scripts" / "python.exe").resolve()).lower()
+    killed_any = False
+
+    try:
+        result = subprocess.run(
+            [
+                "powershell", "-NoProfile", "-NonInteractive", "-Command",
+                (
+                    "Get-CimInstance Win32_Process | "
+                    "Where-Object { $_.CommandLine -like '*telegram_watch*' } | "
+                    "Select-Object ProcessId,ExecutablePath | ConvertTo-Json -Compress"
+                ),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        raw = result.stdout.strip()
+        if not raw:
+            return
+
+        data = json.loads(raw)
+        if isinstance(data, dict):
+            data = [data]
+
+        for proc in data:
+            pid = proc.get("ProcessId")
+            exe = str(proc.get("ExecutablePath") or "").lower()
+            if pid is None or pid == our_pid:
+                continue
+            if exe == venv_python:
+                log(f"Duplicate venv watcher detected: PID={pid} — port lock will handle it.")
+            else:
+                log(
+                    f"Killing stale/non-venv watcher: PID={pid} "
+                    f"exe={proc.get('ExecutablePath')}"
+                )
+                subprocess.run(
+                    [
+                        "powershell", "-NoProfile", "-NonInteractive", "-Command",
+                        f"Stop-Process -Id {pid} -Force -ErrorAction SilentlyContinue",
+                    ],
+                    timeout=5,
+                )
+                killed_any = True
+
+    except Exception as exc:
+        log(f"Warning: stale watcher scan failed: {type(exc).__name__}: {exc}")
+
+    if killed_any:
+        time.sleep(1)
 
 
 def refuse_global_python() -> bool:
@@ -49,6 +108,8 @@ def acquire_single_instance_lock() -> socket.socket:
 
 
 def main() -> None:
+    kill_stale_watchers()
+
     if refuse_global_python():
         return
 
