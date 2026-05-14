@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import requests
@@ -12,16 +13,20 @@ TOKEN_PATH = Path.home() / ".atlas-telegram-token"
 
 
 def load_token() -> str:
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    if token:
+        return token.strip()
     if not TOKEN_PATH.exists():
         raise FileNotFoundError(f"Telegram token file not found: {TOKEN_PATH}")
-
     return TOKEN_PATH.read_text(encoding="utf-8").strip()
 
 
 def load_config() -> dict:
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    if chat_id:
+        return {"telegram_chat_id": chat_id}
     if not CONFIG_PATH.exists():
         raise FileNotFoundError(f"Telegram config file not found: {CONFIG_PATH}")
-
     return json.loads(CONFIG_PATH.read_text(encoding="utf-8-sig"))
 
 

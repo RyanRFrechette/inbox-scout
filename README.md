@@ -48,3 +48,50 @@ Inbox Scout is a local-first Gmail inbox cleanup assistant controlled via Telegr
 | `continue sorting` | Advance to next batch using saved cursor |
 | `queue` / `next` / `status` | Read-only info commands |
 | `ping` | Health check |
+
+## Cloud Deployment — Render Background Worker
+
+GitHub repo: https://github.com/RyanRFrechette/inbox-scout
+
+### Build & start commands
+
+| | Command |
+|---|---|
+| Build | `pip install -r requirements.txt` |
+| Start | `python -m inbox_scout.telegram_watch` |
+| PYTHONPATH | `src` |
+
+### Required secrets (set in Render dashboard — never commit)
+
+| Env var | Description |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` | Atlas bot token from @BotFather |
+| `TELEGRAM_CHAT_ID` | Your Telegram chat ID (numeric) |
+| `GMAIL_TOKEN_JSON` | base64-encoded `token.json` (Gmail OAuth refresh token) |
+
+The code reads `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` from env vars first, falling back to local files for development.
+
+### Persistent disk
+
+Render's ephemeral filesystem loses `data/logs/` and `data/plans/` on every redeploy.
+Attach a **1 GB persistent disk** mounted at `/opt/render/project/src/data` (configured in `render.yaml`).
+
+### Known limitations for cloud
+
+| Limitation | Impact | Fix required |
+|---|---|---|
+| Gmail OAuth tokens can't be refreshed interactively | Must pre-provision `token.json` via a startup wrapper that decodes `GMAIL_TOKEN_JSON` | Startup entrypoint script |
+| Ollama (AI classifier) not available on Render | Classification falls back to rule-based only — no Gmail safety impact | Optional: swap to a cloud LLM |
+| `telegram_watch.py` stale-watcher cleanup uses PowerShell | Fails silently on Linux; watcher still starts | Port to `psutil` or `pkill` |
+
+### Deploy checklist (portfolio demo)
+
+- [ ] Push latest `master` to GitHub
+- [ ] Create Render Background Worker from repo
+- [ ] Set `PYTHONPATH=src` env var
+- [ ] Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` secrets
+- [ ] Encode `token.json` → base64 → set as `GMAIL_TOKEN_JSON`
+- [ ] Add startup wrapper to decode `GMAIL_TOKEN_JSON` to `data/token.json`
+- [ ] Attach 1 GB persistent disk at `/opt/render/project/src/data`
+- [ ] Deploy and send `ping` from Telegram — expect `pong`
+- [ ] Send `status` — expect inbox summary

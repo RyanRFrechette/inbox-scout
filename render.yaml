@@ -1,0 +1,32 @@
+services:
+  - type: worker
+    name: inbox-scout
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m inbox_scout.telegram_watch
+    envVars:
+      - key: PYTHONPATH
+        value: src
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false       # set in Render dashboard — never commit
+      - key: TELEGRAM_CHAT_ID
+        sync: false       # set in Render dashboard — never commit
+      - key: GMAIL_TOKEN_JSON
+        sync: false       # base64-encoded token.json — see deployment notes
+    disk:
+      name: inbox-scout-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
+
+# Deployment notes:
+#
+# GMAIL_TOKEN_JSON: base64-encode your token.json and set as an env var.
+#   A startup script or entrypoint wrapper must decode it to data/token.json
+#   before the watcher starts. See README for the full pre-flight checklist.
+#
+# Ollama (AI classifier) is unavailable on Render. Classification falls back
+#   to rule-based only. This is safe — no Gmail actions are affected.
+#
+# telegram_watch.py currently uses PowerShell for stale-process cleanup.
+#   That code path fails silently on Linux and does not block the watcher.
+#   A Linux-native port (pkill/psutil) is required before production use.
