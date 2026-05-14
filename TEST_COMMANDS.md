@@ -187,6 +187,31 @@ git config user.email
 
 ---
 
+## Sender blocking — Phase 13Z-D
+
+```powershell
+$env:PYTHONPATH = "src"
+
+# Step 1: build plan (read-only, no Gmail changes)
+.venv\Scripts\python.exe -m inbox_scout.natural_intent "block senders in trash"
+.venv\Scripts\python.exe -m inbox_scout.natural_intent "block all senders in trash"
+.venv\Scripts\python.exe -m inbox_scout.natural_intent "block all the senders in the trash"
+
+# Step 2: wrong confirmation must block safely
+.venv\Scripts\python.exe -m inbox_scout.natural_intent "BLOCK 99 TRASH SENDERS"
+.venv\Scripts\python.exe -m inbox_scout.natural_intent "yes block them"
+
+# Step 3: exact confirmation — routes to runner (scope gate will block until gmail.settings.basic is provisioned)
+# Replace N with the count shown in the plan output
+# .venv\Scripts\python.exe -m inbox_scout.natural_intent "BLOCK N TRASH SENDERS"
+
+# Permanent delete still blocked
+.venv\Scripts\python.exe -m inbox_scout.natural_intent "permanently delete"
+.venv\Scripts\python.exe -m inbox_scout.natural_intent "empty my trash"
+```
+
+---
+
 ## Safety rules
 
 - All commands prefixed with `#` are apply-mode commands that change Gmail. Do not run them unless you intend to.

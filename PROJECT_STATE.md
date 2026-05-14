@@ -3776,3 +3776,46 @@ Commits: c0cdf47, 6e02ca1 — 2026-05-14
 - Cleanup test cap: scans up to 25 unread emails maximum.
 - Tests: py_compile OK, import OK.
 - No Gmail write actions. No config/token/data files touched.
+
+---
+
+## Phase 13Z-D — Gated trash sender blocking
+Status: COMPLETE (code + local routing test)
+Date: 2026-05-14
+
+### Goal
+Provide a safer alternative to permanent delete: block future emails from senders already moved to Trash, using Gmail filter rules. User retains full control over existing Trash contents.
+
+### New files
+- **trash_sender_block_plan.py**: Reads senders from `trash_execution_runs.jsonl` (falls back to queue). Deduplicates, validates email format, excludes system/security senders and protected senders. Saves plan to `latest_sender_block_plan.json`. Returns formatted list + confirmation phrase `BLOCK N TRASH SENDERS`.
+- **trash_sender_block_runner.py**: Loads plan, validates exact confirmation phrase and count match, checks plan age (60 min), tests `gmail.settings.basic` scope, creates Gmail filters via `users.settings.filters.create`. Logs every blocked/failed sender to `sender_block_runs.jsonl`.
+
+### Modified files
+- **natural_intent.py**: Added `import re`. Added route for "block senders in trash" → plan. Added regex route `BLOCK \d+ TRASH SENDERS` → runner. Import of both new modules.
+
+### Safety design
+- Plan required before any execution — no one-step blocking.
+- Exact confirmation phrase gates execution (count-matched).
+- Protected/manual-review senders excluded at plan-build time.
+- System sender patterns excluded (noreply@, security@, etc.).
+- Gmail scope gate: `gmail.settings.basic` not yet in token → runner returns clean message, nothing blocked.
+- Permanent delete: disabled at all levels.
+- This is safer than permanent delete: existing emails in Trash are untouched; Gmail Trash is preserved for manual review.
+
+### Gmail scope status
+Filter creation requires `https://www.googleapis.com/auth/gmail.settings.basic`.
+This scope is NOT in the current `token.json` (only `gmail.modify` is active).
+The runner correctly detects this and returns:
+  "Gmail filter creation requires an additional OAuth scope..."
+To enable: re-authorize Gmail adding the settings scope.
+
+### Tests (local routing)
+- "block senders in trash" → plan (read-only) ✓
+- "BLOCK 99 TRASH SENDERS" (wrong count) → "Wrong confirmation phrase" ✓
+- "BLOCK 1 TRASH SENDERS" (exact, matching saved plan) → scope gate message ✓
+- "permanently delete" → Phase 14 blocked ✓
+- "empty my trash" → Phase 14 blocked ✓
+- py_compile OK: trash_sender_block_plan.py, trash_sender_block_runner.py, natural_intent.py ✓
+
+Gmail changes: 0 (scope not yet provisioned)
+Permanent deletes: 0

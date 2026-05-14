@@ -334,7 +334,24 @@ Tested: 2026-05-14
 
 ---
 
+## Phase 13Z-D — Gated trash sender blocking
+Status: COMPLETE (code + local routing test)
+Date: 2026-05-14
+
+New command: "block senders in trash" / "block all senders in trash"
+
+- Two new files: `trash_sender_block_plan.py`, `trash_sender_block_runner.py`
+- Plan phase: reads sender addresses from latest trash execution log (or queue fallback), deduplicates, filters protected/system senders, saves plan, returns list + confirmation phrase `BLOCK N TRASH SENDERS`.
+- Execution phase: exact confirmation phrase required, plan age-checked (60 min), count verified, then creates Gmail filters via Gmail Settings API.
+- Scope gate: `gmail.settings.basic` not yet in token → runner returns clean "scope not provisioned" message, nothing blocked.
+- Safety: protected/manual-review senders never blocked; system/security senders excluded; permanent delete disabled.
+- This is safer than permanent delete: existing emails untouched, Gmail Trash preserved for manual review.
+- Routing tests: plan phrase → plan only ✓, wrong phrase → blocked ✓, exact phrase → scope gate ✓, permanent delete → blocked ✓.
+
+---
+
 ## Planned phases (not yet started)
 
+- Re-authorize Gmail with `gmail.settings.basic` scope to enable filter creation
 - Phase 14: Permanent delete mode (nuclear, disabled until explicitly enabled)
 - Portfolio/cloud deployment planning

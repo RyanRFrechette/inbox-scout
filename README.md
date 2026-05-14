@@ -48,6 +48,8 @@ Inbox Scout is a local-first Gmail inbox cleanup assistant controlled via Telegr
 | `continue sorting` | Advance to next batch using saved cursor |
 | `queue` / `next` / `status` | Read-only info commands |
 | `ping` | Health check |
+| `block senders in trash` | Build a sender-block plan from trashed emails |
+| `BLOCK N TRASH SENDERS` | Exact confirmation phrase to execute the block |
 
 ## Cloud Deployment — Render Background Worker
 

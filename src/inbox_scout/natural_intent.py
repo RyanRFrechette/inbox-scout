@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,8 @@ from inbox_scout.trash_execution_gate import build_trash_execution_gate_message
 from inbox_scout.trash_execution_runner import build_trash_runner_message
 from inbox_scout.inbox_cleanup_runner import build_inbox_cleanup_runner_message
 from inbox_scout.cleanup_control import build_cleanup_status_message, build_cancel_cleanup_message
+from inbox_scout.trash_sender_block_plan import build_sender_block_plan_message
+from inbox_scout.trash_sender_block_runner import build_sender_block_runner_message
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -392,6 +395,19 @@ def handle_natural_message(text: str) -> str:
         "send trash to trash",
     ]):
         return build_inbox_cleanup_runner_message()
+
+    # Sender-block confirmation: exact phrase "BLOCK N TRASH SENDERS" (case-insensitive)
+    if re.match(r"^block\s+\d+\s+trash\s+senders$", msg):
+        return build_sender_block_runner_message(text.strip())
+
+    if any(phrase in msg for phrase in [
+        "block senders in trash",
+        "block all senders in trash",
+        "block all the senders in the trash",
+        "block trash senders",
+        "block the trash senders",
+    ]):
+        return build_sender_block_plan_message()
 
     if any(phrase in msg for phrase in [
         "sort",
