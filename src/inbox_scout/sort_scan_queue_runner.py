@@ -98,14 +98,16 @@ def run_command(args: list[str]) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["PYTHONPATH"] = str(PROJECT_ROOT / "src")
     env["PYTHONUTF8"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
 
     return subprocess.run(
         args,
         cwd=str(PROJECT_ROOT),
         env=env,
-        text=True,
         capture_output=True,
         timeout=300,
+        encoding="utf-8",
+        errors="replace",
     )
 
 
