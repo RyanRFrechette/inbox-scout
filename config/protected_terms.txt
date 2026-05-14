@@ -1,0 +1,29 @@
+﻿invoice
+payment
+bank
+credit card
+tax
+irs
+warranty
+replacement
+password
+security alert
+verification code
+single-use code
+interview
+job offer
+client
+legal
+medical
+doctor
+hospital
+patient
+appointment
+insurance
+collection
+balance
+refund
+return request
+family
+vet
+veterinary

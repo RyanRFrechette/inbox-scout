@@ -1,0 +1,129 @@
+﻿{
+  "version": "0.3.1",
+  "default_category": "Manual review",
+  "safe_mode": true,
+  "rules_enabled": true,
+  "protected_categories": [
+    "Important",
+    "Needs reply",
+    "Job/career",
+    "Client/business",
+    "Bills/receipts",
+    "Warranty/support",
+    "Finance",
+    "Legal",
+    "Security alert",
+    "Personal",
+    "Medical"
+  ],
+  "categories": {
+    "Security alert": [
+      "security alert",
+      "single-use code",
+      "verification code",
+      "password",
+      "login",
+      "sign-in",
+      "account protection"
+    ],
+    "Finance": [
+      "bank",
+      "credit card",
+      "payment",
+      "balance",
+      "collection",
+      "refund",
+      "charge",
+      "statement"
+    ],
+    "Bills/receipts": [
+      "receipt",
+      "invoice",
+      "ordered",
+      "delivered",
+      "return request",
+      "refund issued",
+      "payment due"
+    ],
+    "Warranty/support": [
+      "warranty",
+      "support",
+      "replacement",
+      "return confirmed",
+      "claim",
+      "case number"
+    ],
+    "Job/career": [
+      "job",
+      "career",
+      "interview",
+      "application",
+      "resume",
+      "linkedin",
+      "hiring",
+      "recruiter"
+    ],
+    "Client/business": [
+      "client",
+      "business",
+      "customer",
+      "lead",
+      "contractor",
+      "quote",
+      "proposal",
+      "website"
+    ],
+    "Legal": [
+      "legal",
+      "court",
+      "attorney",
+      "lawyer",
+      "notice",
+      "settlement"
+    ],
+    "Medical": [
+      "appointment",
+      "patient",
+      "doctor",
+      "medical",
+      "hospital",
+      "insurance",
+      "veterinary",
+      "vet"
+    ],
+    "Personal": [
+      "family",
+      "mom",
+      "dad",
+      "girlfriend"
+    ],
+    "Newsletter": [
+      "newsletter",
+      "digest",
+      "welcome to",
+      "weekly",
+      "update"
+    ],
+    "Promotion": [
+      "sale",
+      "off",
+      "discount",
+      "deal",
+      "save",
+      "new arrivals",
+      "last chance"
+    ],
+    "Junk": [
+      "unsubscribe",
+      "limited time",
+      "act now",
+      "free gift"
+    ],
+    "Archive candidate": [
+      "daily digest",
+      "welcome",
+      "promotion",
+      "newsletter"
+    ]
+  }
+}

@@ -1,0 +1,4 @@
+﻿# Add protected sender emails or domains later.
+# Example:
+# importantperson@example.com
+# @bankname.com

@@ -1,0 +1,241 @@
+﻿import argparse
+import json
+from datetime import datetime
+
+from rich.console import Console
+from rich.table import Table
+
+from inbox_scout.ai_classifier import classify_with_ai
+from inbox_scout.gmail_auth import get_gmail_service
+from inbox_scout.inbox_fetcher import get_header
+from inbox_scout.rule_classifier import classify_email, load_json, load_lines
+from inbox_scout.paths import REPORTS_DIR, PROTECTED_SENDERS_FILE, PROTECTED_TERMS_FILE, RULES_FILE
+
+console = Console()
+
+
+def build_gmail_query(unread_only=False, days=None):
+    query_parts = []
+
+    if unread_only:
+        query_parts.append("is:unread")
+
+    if days:
+        query_parts.append(f"newer_than:{days}d")
+
+    return " ".join(query_parts)
+
+
+def fetch_report_emails(limit=25, unread_only=False, days=None):
+    service = get_gmail_service()
+    query = build_gmail_query(unread_only=unread_only, days=days)
+
+    request = {
+        "userId": "me",
+        "labelIds": ["INBOX"],
+        "maxResults": limit
+    }
+
+    if query:
+        request["q"] = query
+
+    results = service.users().messages().list(**request).execute()
+    messages = results.get("messages", [])
+
+    emails = []
+
+    for msg in messages:
+        message_id = msg["id"]
+
+        message = service.users().messages().get(
+            userId="me",
+            id=message_id,
+            format="metadata",
+            metadataHeaders=["From", "Subject", "Date"]
+        ).execute()
+
+        headers = message.get("payload", {}).get("headers", [])
+
+        emails.append({
+            "message_id": message_id,
+            "from": get_header(headers, "From"),
+            "subject": get_header(headers, "Subject"),
+            "date": get_header(headers, "Date"),
+            "snippet": message.get("snippet", "")
+        })
+
+    return emails
+
+
+def classify_for_report(emails):
+    rules = load_json(RULES_FILE)
+    protected_terms = load_lines(PROTECTED_TERMS_FILE)
+    protected_senders = load_lines(PROTECTED_SENDERS_FILE)
+
+    results = []
+
+    for email in emails:
+        rule_result = classify_email(email, rules, protected_terms, protected_senders)
+        ai_result = classify_with_ai(email, rule_result)
+
+        results.append({
+            **email,
+            "rule_classification": rule_result,
+            "ai_classification": ai_result
+        })
+
+    return results
+
+
+def filter_by_category(results, category):
+    if not category:
+        return results
+
+    wanted = category.lower()
+
+    return [
+        item for item in results
+        if item["ai_classification"]["category"].lower() == wanted
+    ]
+
+
+def group_results(results):
+    grouped = {}
+
+    for item in results:
+        category = item["ai_classification"]["category"]
+        grouped.setdefault(category, [])
+        grouped[category].append(item)
+
+    return grouped
+
+
+def make_markdown_report(results, args):
+    grouped = group_results(results)
+
+    lines = []
+    lines.append("# Inbox Scout Report")
+    lines.append("")
+    lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    lines.append(f"Limit: {args.limit}")
+    lines.append(f"Unread only: {args.unread_only}")
+    lines.append(f"Days: {args.days if args.days else 'All'}")
+    lines.append(f"Category filter: {args.category if args.category else 'None'}")
+    lines.append("")
+    lines.append("## Safety Status")
+    lines.append("")
+    lines.append("- Read-only mode")
+    lines.append("- No Gmail changes made")
+    lines.append("- No archive")
+    lines.append("- No delete")
+    lines.append("- No labels")
+    lines.append("- No replies")
+    lines.append("")
+
+    manual_count = sum(1 for item in results if item["ai_classification"]["manual_review"])
+    low_risk_count = len(results) - manual_count
+
+    lines.append("## Summary")
+    lines.append("")
+    lines.append(f"- Total emails scanned: {len(results)}")
+    lines.append(f"- Manual review required: {manual_count}")
+    lines.append(f"- Low-risk / possible archive later: {low_risk_count}")
+    lines.append("")
+
+    for category in sorted(grouped):
+        lines.append(f"## {category}")
+        lines.append("")
+
+        for item in grouped[category]:
+            ai = item["ai_classification"]
+            lines.append(f"### {item.get('subject', '(No subject)')}")
+            lines.append(f"- From: {item.get('from', '')}")
+            lines.append(f"- Date: {item.get('date', '')}")
+            lines.append(f"- Confidence: {ai['confidence_score']}")
+            lines.append(f"- Risk: {ai['risk_score']}")
+            lines.append(f"- Manual review: {ai['manual_review']}")
+            lines.append(f"- Suggested action: {ai['suggested_action']}")
+            lines.append(f"- Reason: {ai['reason']}")
+            lines.append("")
+
+    return "\n".join(lines)
+
+
+def save_report(results, args):
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    base_name = f"inbox_report_{timestamp}"
+
+    json_path = REPORTS_DIR / f"{base_name}.json"
+    md_path = REPORTS_DIR / f"{base_name}.md"
+
+    if args.export in ["json", "both"]:
+        json_path.write_text(
+            json.dumps(results, indent=2, ensure_ascii=False),
+            encoding="utf-8"
+        )
+
+    if args.export in ["md", "both"]:
+        md_report = make_markdown_report(results, args)
+        md_path.write_text(md_report, encoding="utf-8")
+
+    return json_path, md_path
+
+
+def print_report_summary(results):
+    grouped = group_results(results)
+
+    table = Table(title="Inbox Scout Report Summary")
+    table.add_column("Category", style="green")
+    table.add_column("Count", style="cyan")
+
+    for category in sorted(grouped):
+        table.add_row(category, str(len(grouped[category])))
+
+    console.print(table)
+
+    manual_count = sum(1 for item in results if item["ai_classification"]["manual_review"])
+    low_risk_count = len(results) - manual_count
+
+    console.print(f"[bold yellow]Manual review required:[/bold yellow] {manual_count}")
+    console.print(f"[bold cyan]Low-risk / possible archive later:[/bold cyan] {low_risk_count}")
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Inbox Scout Report Mode")
+
+    parser.add_argument("--limit", type=int, default=25)
+    parser.add_argument("--unread-only", action="store_true")
+    parser.add_argument("--days", type=int)
+    parser.add_argument("--category", type=str)
+    parser.add_argument("--export", choices=["md", "json", "both"], default="both")
+
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+
+    console.print("\n[bold cyan]Inbox Scout Phase 5: Report Mode[/bold cyan]\n")
+    console.print("[yellow]Read-only mode. No Gmail changes will be made.[/yellow]\n")
+
+    emails = fetch_report_emails(
+        limit=args.limit,
+        unread_only=args.unread_only,
+        days=args.days
+    )
+
+    results = classify_for_report(emails)
+    results = filter_by_category(results, args.category)
+
+    print_report_summary(results)
+
+    json_path, md_path = save_report(results, args)
+
+    console.print(f"\n[bold green]Report created safely.[/bold green]")
+    console.print(f"JSON report: {json_path}")
+    console.print(f"Markdown report: {md_path}")
+    console.print("\n[yellow]No Gmail changes were made.[/yellow]\n")
+
+
+if __name__ == "__main__":
+    main()
