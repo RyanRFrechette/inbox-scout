@@ -110,6 +110,11 @@ def build_scan_approval_response(_: str = "") -> str:
                 "Say sort all to start fresh. Gmail not touched."
             )
 
+    # Full multi-batch cleanup scan: loop all Gmail pages, build one merged plan
+    if plan.get("cleanup_mode") is True:
+        from inbox_scout.inbox_cleanup_full_scan import run_full_cleanup_scan
+        return run_full_cleanup_scan()
+
     result = run_scan_queue_runner()
 
     run_data = load_json(LATEST_SCAN_QUEUE_RUN)

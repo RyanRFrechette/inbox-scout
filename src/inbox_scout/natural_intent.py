@@ -78,8 +78,9 @@ def sort_plan_message(text: str, continuation: bool = False, cleanup: bool = Fal
             )
         if plan.cleanup_mode:
             return (
-                "I will scan your unread inbox in a read-only batch of 5.\n"
-                "After scanning, I will build a local trash plan.\n"
+                "I will scan your entire unread inbox in read-only batches of 5.\n"
+                "This may take a while depending on how many unread emails you have.\n"
+                "After scanning, I will build a local cleanup plan.\n"
                 "I will not move anything until you say move trash.\n\n"
                 "Read-only. No Gmail changes.\n\n"
                 "Reply yes to scan, or cancel to stop."
