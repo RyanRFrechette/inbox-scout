@@ -3516,4 +3516,88 @@ Permanent deletes: 0
 Replies sent: 0
 
 Next recommended phase:
-Phase 13Y - Natural UX polish.
+Fix continuation cursor before Phase 13Y. See section below.
+
+
+---
+
+## Phase 13X UTF-8 subprocess fixes
+
+Completed: 2026-05-14
+Commits: 9948430, fd30a37
+
+Two bugs found and fixed during live Telegram testing. Both in sort_scan_queue_runner.py only.
+
+### Bug 1 (commit 9948430)
+Symptom: "yes" after "sort all" → "I tried to run the safe read-only scan, but it did not complete cleanly."
+Cause: report_mode.py crashed with UnicodeEncodeError when printing an email subject containing the 🎯 emoji (U+1F3AF). Rich's LegacyWindowsTerm was trying to encode it with cp1252, which does not support emoji.
+Fix: Added env["PYTHONUTF8"] = "1" to run_command() in sort_scan_queue_runner.py. This forces report_mode.py subprocess to use UTF-8 for all I/O.
+
+### Bug 2 (commit fd30a37)
+Symptom: Same error after restart. Run file not updated (still showed 10:40 AM first-failure state despite "yes" being sent at 10:46 AM).
+Diagnosis: The PYTHONUTF8=1 fix made report_mode.py write UTF-8 bytes successfully, but sort_scan_queue_runner.py was reading them with subprocess.run(text=True) and no encoding — defaulting to cp1252. UTF-8 byte 0x8D (from U+200D ZERO WIDTH JOINER, present in combined emoji sequences) is undefined in cp1252. This caused a UnicodeDecodeError inside subprocess.run() in run_command(), which crashed the runner before save_result() was ever called.
+Fix: Added env["PYTHONIOENCODING"] = "utf-8" and changed subprocess.run(..., text=True) to subprocess.run(..., encoding="utf-8", errors="replace") in run_command().
+
+File changed: src/inbox_scout/sort_scan_queue_runner.py (both fixes, run_command() only)
+Gmail changes: 0
+Permanent deletes: 0
+
+
+---
+
+## Phase 13X live Telegram test — PASSED
+
+Tested: 2026-05-14
+
+Test flow:
+1. Sent "sort all" → Atlas showed safe batch message (batch of 5, safety checks, asked for approval) ✓
+2. Sent "yes" → Atlas scanned 5 unread inbox emails and built local review queue ✓
+3. Result shown in Telegram:
+   - Total queued emails: 5
+   - Protected/manual review: 4
+   - Pending low-risk review: 1
+4. Atlas confirmed: only read Gmail, did not archive/trash/mark-read/reply/delete ✓
+5. Continuation prompt shown: "Say 'continue sorting' to process the next safe batch of 5." ✓
+
+Confirmed from latest_scan_queue_run.json (scanrun_20260514_145851):
+- status: "complete"
+- gmail_scan_ran: true
+- gmail_changes_enabled: false
+- permanent_delete_enabled: false
+- report_return_code: 0
+- queue_return_code: 0
+
+Gmail changes: 0
+Permanent deletes: 0
+
+
+---
+
+## Phase 13X continuation audit
+
+Audited: 2026-05-14
+
+Finding: "continue sorting" WILL repeat the same 5 emails, not advance to the next 5.
+
+Root cause:
+- report_mode.py --limit 5 --page-size 5 --unread-only always calls Gmail API messages.list with no pageToken
+- Gmail API always returns the first N matching messages (most recent first) when no pageToken is provided
+- Since the 5 scanned emails are not archived, marked read, or moved, they remain the first 5 unread inbox results
+- Every subsequent "continue sorting" → "yes" would re-fetch and re-queue the same 5 emails
+
+Code evidence:
+- fetch_report_emails() in report_mode.py: no --page-token argument, no cursor file, always starts fresh
+- sort_scan_queue_runner.py run_command(): builds report_args from plan only, no cursor lookup
+- sort_scan_queue_plan.py: ScanQueuePlan dataclass has no page_token field
+
+Required fix (2–3 files):
+1. report_mode.py: add --page-token TOKEN argument; use it as initial pageToken in fetch_report_emails(); save nextPageToken to data/plans/latest_gmail_scan_cursor.json after each batch
+2. sort_scan_queue_runner.py: before building report_args, read cursor file if it exists; append --page-token TOKEN to report_args if present
+3. (Optional) sort_scan_queue_plan.py: add page_token field to ScanQueuePlan for transparency
+
+When to clear the cursor: when the user starts a fresh non-continuation sort (sort N emails, not "continue sorting"), or when the cursor is too old. sort_all: False plans should always ignore the cursor.
+
+Recommended timing: fix BEFORE Phase 13Y. Without a working cursor, the continuation prompt is misleading and 13Y UX polish would be built on broken behavior.
+
+Next recommended phase:
+Fix continuation cursor (2-3 file change), then Phase 13Y - Natural UX polish.

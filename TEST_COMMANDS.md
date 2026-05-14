@@ -23,10 +23,19 @@ $env:PYTHONPATH = "src"
 ```powershell
 $env:PYTHONPATH = "src"
 
-# Sort planning (read-only)
+# Sort planning (read-only, local logic only)
 .venv\Scripts\python.exe -m inbox_scout.natural_intent "sort 5 emails"
 .venv\Scripts\python.exe -m inbox_scout.natural_intent "sort 25 emails"
 .venv\Scripts\python.exe -m inbox_scout.natural_intent "sort all"
+
+# Continuation phrases (should all show the same safe batch plan, not execute)
+.venv\Scripts\python.exe -m inbox_scout.natural_intent "continue sorting"
+.venv\Scripts\python.exe -m inbox_scout.natural_intent "sort more"
+.venv\Scripts\python.exe -m inbox_scout.natural_intent "next batch"
+.venv\Scripts\python.exe -m inbox_scout.natural_intent "keep sorting"
+
+# "next" alone should route to next review item, NOT to continuation
+.venv\Scripts\python.exe -m inbox_scout.natural_intent "next"
 
 # Safety blocks (should return blocked responses, not execute)
 .venv\Scripts\python.exe -m inbox_scout.natural_intent "empty my trash"

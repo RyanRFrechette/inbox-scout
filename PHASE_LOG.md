@@ -216,8 +216,8 @@ Git recorded as renames. No source code changed. No Gmail actions. No config/tok
 Verification passed: py_compile OK (natural_intent, telegram_watch, trash_execution_runner, report_mode), import OK.
 
 ## Phase 13X — Safe sort-all batch loop
-Status: COMPLETE
-Commit: f0dd6e8 — 2026-05-14
+Status: COMPLETE (code + live test)
+Commits: f0dd6e8, 9948430, fd30a37 — 2026-05-14
 "sort all" now runs as a controlled 5-email batch, not an unlimited scan.
 Continuation phrases added: continue sorting, sort more, next batch, keep sorting.
 After each batch Atlas prompts: "Say 'continue sorting' to process the next safe batch of 5."
@@ -225,10 +225,31 @@ Two-step approval preserved. Removed sort_all hard-blocks from plan, approval, a
 Files changed: sort_scan_queue_plan.py, sort_scan_queue_approval.py, sort_scan_queue_runner.py, natural_intent.py.
 No Gmail write actions. No config/token/data files touched.
 
+### Phase 13X UTF-8 subprocess fixes
+Commits: 9948430, fd30a37 — 2026-05-14
+Two sequential bugs fixed after the initial live test failure:
+- 9948430: PYTHONUTF8=1 added to subprocess env — fixed crash when report_mode tried to encode emoji subject with cp1252
+- fd30a37: PYTHONIOENCODING=utf-8 + encoding="utf-8", errors="replace" added to subprocess.run — fixed UnicodeDecodeError when runner decoded UTF-8 output (containing ZWJ U+200D bytes) using cp1252
+File changed: sort_scan_queue_runner.py only (both fixes).
+
+### Phase 13X live Telegram test — PASSED
+Tested: 2026-05-14
+"sort all" → safe batch plan message ✓
+"yes" → scanned 5 unread inbox emails, built local review queue ✓
+Result: 5 queued, 4 protected/manual review, 1 pending low-risk ✓
+Continuation prompt shown ✓
+No Gmail write actions. No archive/trash/mark-read/delete.
+
+### Phase 13X continuation audit
+Finding: "continue sorting" repeats the same first 5 unread emails.
+Root cause: report_mode.py has no cursor/page-token mechanism. Gmail API always returns the first N unread emails without a pageToken.
+Fix required before Phase 13Y: add --page-token to report_mode.py and save nextPageToken as a cursor after each batch.
+
 ---
 
 ## Planned phases (not yet started)
 
+- Fix continuation cursor (before Phase 13Y): "continue sorting" currently repeats batch 1
 - Phase 13Y: Natural UX polish
 - Phase 13Z: Final local MVP
 - Phase 14: Permanent delete mode (nuclear, disabled until explicitly enabled)

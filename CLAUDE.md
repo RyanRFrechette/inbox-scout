@@ -1,6 +1,6 @@
 # Inbox Scout - CLAUDE.md
 
-Last updated: 2026-05-14 (Phase 13X)
+Last updated: 2026-05-14 (Phase 13X live test + continuation audit)
 
 ---
 
@@ -20,7 +20,7 @@ The Telegram bot ("Atlas") allows Ryan to run inbox operations from his phone wi
 ## 2. Current phase / status
 
 **Current branch:** master
-**Last commit:** `f0dd6e8` — feat: add Phase 13X safe sort-all batch loop (2026-05-14)
+**Last commit:** `fd30a37` — fix: make sort batch subprocess output UTF-8 safe (2026-05-14)
 
 **Phase 13X** is the most recently completed phase (2026-05-14):
 - "sort all" now runs as a safe controlled batch loop — 5 emails per batch, never unlimited
@@ -29,7 +29,24 @@ The Telegram bot ("Atlas") allows Ryan to run inbox operations from his phone wi
 - Two-step approval preserved on every batch (plan → yes → scan)
 - Removed three separate `sort_all` hard-blocks from plan, approval, and runner layers
 - No Gmail write actions. No config changes. No token/credential/data files touched.
-- Commit: `f0dd6e8`
+- Commits: `f0dd6e8`, `9948430`, `fd30a37`
+
+**Phase 13X live Telegram test passed (2026-05-14):**
+- "sort all" → safe batch message ✓
+- "yes" → scanned 5 unread emails, built local review queue ✓
+- Result: 5 queued, 4 protected/manual review, 1 pending low-risk ✓
+- Continuation prompt shown correctly ✓
+- No Gmail write actions confirmed
+
+**Phase 13X UTF-8 subprocess bugs fixed (2026-05-14):**
+- `9948430` — Added `PYTHONUTF8=1` to subprocess env in runner (fixed crash on emoji subjects)
+- `fd30a37` — Added `PYTHONIOENCODING=utf-8` + `encoding="utf-8", errors="replace"` to subprocess.run (fixed UnicodeDecodeError from cp1252 decoding UTF-8 output containing ZWJ characters)
+
+**Known issue — continuation does not advance (to be fixed before Phase 13Y):**
+- "continue sorting" reruns the same first 5 unread emails every time
+- Root cause: `report_mode.py` has no cursor/page-token mechanism; Gmail API always returns the first N results without one
+- Fix required: add `--page-token` argument to report_mode and save the `nextPageToken` as a cursor after each batch
+- Files involved: `report_mode.py`, `sort_scan_queue_runner.py`
 
 **Pre-13X Backup Archive Cleanup** was completed prior (2026-05-14):
 - Moved 12 backup/snapshot files from `src/inbox_scout/` to `archive/phase_backups/`
@@ -40,9 +57,10 @@ The Telegram bot ("Atlas") allows Ryan to run inbox operations from his phone wi
 **Current safety mode:** READ-ONLY ONLY (see PROJECT_STATE.md for flag details)
 
 **Next planned steps (in order):**
-1. Phase 13Y — Natural UX polish
-2. Phase 13Z — Final local MVP
-3. Phase 14 — Permanent delete mode (nuclear, disabled until explicitly enabled)
+1. Fix continuation cursor (before Phase 13Y — "continue sorting" currently repeats the same 5 emails)
+2. Phase 13Y — Natural UX polish
+3. Phase 13Z — Final local MVP
+4. Phase 14 — Permanent delete mode (nuclear, disabled until explicitly enabled)
 
 ---
 
@@ -135,8 +153,9 @@ See `TEST_COMMANDS.md` for the full list of safe test commands.
 
 ## 9. Current next steps
 
-1. **Phase 13Y** — Natural UX polish.
-2. Continue through 13Z (final local MVP), then discuss Phase 14 (permanent delete, nuclear mode) separately.
+1. **Fix continuation cursor** — "continue sorting" currently repeats the same 5 emails. Must be fixed before Phase 13Y. Requires adding `--page-token` to `report_mode.py` and saving the Gmail `nextPageToken` as a cursor after each batch.
+2. **Phase 13Y** — Natural UX polish (after continuation cursor is fixed).
+3. Continue through 13Z (final local MVP), then discuss Phase 14 (permanent delete, nuclear mode) separately.
 
 **Do not jump ahead to Phase 14 without Ryan explicitly initiating it.**
 
