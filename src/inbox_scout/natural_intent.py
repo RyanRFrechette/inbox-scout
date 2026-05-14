@@ -56,54 +56,36 @@ def sort_plan_message(text: str, continuation: bool = False) -> str:
 
     if plan.workflow_mode == "blocked_phase_14_only":
         return (
-            "That sounds like a permanent delete request.\n\n"
-            "Permanent delete is a Phase 14 nuclear feature and is disabled right now.\n\n"
-            "I did not scan Gmail. I did not delete anything."
+            "Permanent delete is disabled.\n\n"
+            "That is a Phase 14 nuclear feature. I did not scan or delete anything."
         )
 
     if plan.workflow_mode != "commands_planned":
         return (
-            "I am not sure how to safely turn that into an inbox sorting plan yet.\n\n"
-            "Try saying: sort 5 emails.\n\n"
-            "I did not touch Gmail."
+            "Not sure how to turn that into a safe sort plan.\n\n"
+            "Try: sort 5 emails\n\n"
+            "Gmail not touched."
         )
 
     if plan.sort_all:
         if plan.is_continuation:
-            scan_line = "I will scan the next 5 unread emails from where the last batch left off."
-            action_line = "Want me to process the next safe batch now?"
-        else:
-            scan_line = "I will scan the next 5 unread emails and build a review queue."
-            action_line = "Want me to start the first safe batch now?"
-
+            return (
+                "I will scan the next 5 unread emails from where the last batch left off.\n"
+                "Say continue sorting again after this batch to advance.\n\n"
+                "Read-only. No Gmail changes.\n\n"
+                "Reply yes to scan this batch, or cancel to stop."
+            )
         return (
-            "I can sort your inbox safely in batches of 5 emails.\n\n"
-            f"{scan_line}\n"
-            "After each batch, say 'continue sorting' to process the next 5.\n\n"
-            "Safety check:\n"
-            "- I will only read Gmail.\n"
-            "- I will not archive anything.\n"
-            "- I will not move anything to Trash.\n"
-            "- I will not mark anything read.\n"
-            "- I will not reply or delete anything.\n\n"
-            "I did not scan Gmail yet.\n\n"
-            f"{action_line}\n"
-            "Reply yes to continue, or cancel to stop."
+            "I will scan the first 5 unread emails and build a review queue.\n"
+            "Say continue sorting after each batch to advance.\n\n"
+            "Read-only. No Gmail changes.\n\n"
+            "Reply yes to scan this batch, or cancel to stop."
         )
 
     return (
-        "I can prepare a safe Inbox Scout scan.\n\n"
-        f"I would scan {plan.requested_limit} unread inbox emails and build a review queue.\n\n"
-        "Safety check:\n"
-        "- I will only read Gmail.\n"
-        "- I will not archive anything.\n"
-        "- I will not move anything to Trash.\n"
-        "- I will not mark anything read.\n"
-        "- I will not reply or delete anything.\n\n"
-        "For now, I only prepared the plan.\n"
-        "I did not scan Gmail. I did not touch Gmail.\n\n"
-        "Want me to run the safe read-only scan now?\n"
-        "Reply yes to continue, or cancel to stop."
+        f"I will scan {plan.requested_limit} unread emails and build a review queue.\n\n"
+        "Read-only. No Gmail changes.\n\n"
+        "Reply yes to scan, or cancel to stop."
     )
 
 
@@ -111,7 +93,7 @@ def queue_summary() -> str:
     items = load_queue_items()
 
     if not items:
-        return "I do not see a current Inbox Scout queue yet. I did not touch Gmail."
+        return "No queue yet. Run sort to scan your inbox first."
 
     protected = [
         item for item in items
@@ -148,7 +130,7 @@ def queue_summary() -> str:
         lines.append(f"- {subject}")
 
     lines.append("")
-    lines.append("I did not touch Gmail.")
+    lines.append("Gmail not touched.")
     return "\n".join(lines)
 
 
@@ -159,16 +141,16 @@ def next_review_item() -> str:
         decision = clean(item.get("local_decision")).lower()
         if decision == "pending_review":
             return (
-                "This is the next email that needs review:\n\n"
+                "Next for review:\n\n"
                 f"ID: {clean(item.get('queue_id'))}\n"
                 f"Category: {clean(item.get('category'))}\n"
                 f"Risk: {clean(item.get('risk_score') or item.get('risk'))}\n"
                 f"From: {clean(item.get('from'))}\n"
                 f"Subject: {clean(item.get('subject'))}\n\n"
-                "I did not touch Gmail."
+                "Gmail not touched."
             )
 
-    return "Nothing needs review in the current batch. I did not touch Gmail."
+    return "Nothing pending in this batch. Gmail not touched."
 
 
 def help_message() -> str:
@@ -194,7 +176,7 @@ def handle_natural_message(text: str) -> str:
         return build_scan_approval_response(text)
 
     if msg in {"cancel", "stop", "never mind", "nevermind"}:
-        return "Cancelled. I did not scan Gmail. I did not touch Gmail."
+        return "Cancelled. Gmail not touched."
 
     if any(phrase in msg for phrase in [
         "empty my trash",
@@ -353,10 +335,7 @@ def handle_natural_message(text: str) -> str:
     ]):
         return sort_plan_message(text)
 
-    return (
-        "I understand this is about Inbox Scout, but I am not sure what you want me to do yet.\n\n"
-        + help_message()
-    )
+    return "Not sure what you mean.\n\n" + help_message()
 
 
 def main() -> None:

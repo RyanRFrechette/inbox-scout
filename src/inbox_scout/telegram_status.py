@@ -149,10 +149,7 @@ def build_moved_message() -> str:
     ]
 
     if not successful_runs:
-        return (
-            "I have not moved anything yet.\n\n"
-            "Gmail changes made by this command: 0"
-        )
+        return "Nothing moved yet. Gmail not touched."
 
     latest = successful_runs[-1]
     moved_ids = [str(x) for x in latest.get("trashed_ids", [])]
@@ -175,10 +172,7 @@ def build_moved_message() -> str:
 
     lines.extend([
         "",
-        "Permanent delete: 0",
-        "Archived: 0",
-        "Marked read: 0",
-        "Gmail changes made by this command: 0",
+        "Moved to Trash only. No archive, delete, or mark-read.",
     ])
 
     return "\n".join(lines)
@@ -208,8 +202,7 @@ def build_still_needs_review_message() -> str:
 
     lines.extend([
         "",
-        "I ignored anything already moved to Gmail Trash.",
-        "Gmail changes made by this command: 0",
+        "Already-trashed items not shown. Gmail not touched.",
     ])
 
     return "\n".join(lines)
@@ -269,29 +262,16 @@ def build_status_message() -> str:
         )
 
     message = (
-        "Inbox Scout Status / Audit\n\n"
-        "Current batch rule: 5 emails at a time\n"
-        "Mode: safe/local audit\n\n"
-        f"Latest queue items: {len(items)}\n"
-        f"Still needs review: {len(review_remaining)}\n"
-        f"Protected/manual-review: {len(protected)}\n"
-        f"Archived: {len(archived)}\n"
-        f"Trashed: {len(trashed)}\n"
-        f"Marked read: {len(marked_read)}\n\n"
-        f"Archive log entries: {len(archive_logs)}\n"
-        f"Trash execution log entries: {len(trash_logs)}\n"
-        f"Mark-read log entries: {len(mark_logs)}\n"
-        f"Decision log entries: {len(decision_logs)}\n\n"
-        "Decision counts:\n"
+        "Inbox Scout Status\n\n"
+        f"Queue: {len(items)} | Needs review: {len(review_remaining)} | Protected: {len(protected)}\n"
+        f"Archived: {len(archived)} | Trashed: {len(trashed)} | Marked read: {len(marked_read)}\n\n"
+        "Decisions:\n"
         + "\n".join(f"- {k}: {v}" for k, v in sorted(decision_counts.items()))
-        + "\n\nHandled items:\n"
+        + "\n\nHandled:\n"
         + ("\n".join(handled_lines) if handled_lines else "- None")
-        + "\n\nProtected / untouched:\n"
+        + "\n\nProtected:\n"
         + ("\n".join(protected_lines) if protected_lines else "- None")
-        + "\n\nSafety:\n"
-        "- Permanent deletes: 0\n"
-        "- Replies sent: 0\n"
-        "- Gmail changes made by this Telegram status command: 0"
+        + "\n\nRead-only. No Gmail changes."
     )
 
     return message

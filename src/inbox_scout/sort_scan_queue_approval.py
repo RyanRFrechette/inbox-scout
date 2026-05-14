@@ -96,9 +96,8 @@ def build_scan_approval_response(_: str = "") -> str:
 
     if not ok:
         return (
-            f"I cannot safely run that yet.\n\n"
-            f"Reason: {reason}\n\n"
-            "I did not scan Gmail. I did not touch Gmail."
+            f"Cannot run scan: {reason}\n\n"
+            "Gmail not touched."
         )
 
     # If this is a continuation and the last batch already exhausted Gmail pages, stop early.
@@ -106,10 +105,9 @@ def build_scan_approval_response(_: str = "") -> str:
         cursor = load_json(LATEST_GMAIL_SCAN_CURSOR)
         if cursor and "next_page_token" in cursor and not cursor["next_page_token"]:
             return (
-                "Your inbox looks fully sorted for now.\n\n"
-                "There were no more unread email pages after the last batch.\n\n"
-                "Say 'sort all' to start a fresh sort session from the beginning.\n\n"
-                "I did not scan Gmail. I did not touch Gmail."
+                "Inbox looks fully sorted.\n\n"
+                "No more unread pages after the last batch.\n\n"
+                "Say sort all to start fresh. Gmail not touched."
             )
 
     result = run_scan_queue_runner()
@@ -118,9 +116,8 @@ def build_scan_approval_response(_: str = "") -> str:
 
     if result.returncode != 0 or run_data.get("status") != "complete":
         return (
-            "I tried to run the safe read-only scan, but it did not complete cleanly.\n\n"
-            "I stopped safely.\n"
-            "I did not archive, trash, mark read, reply, or delete anything."
+            "Scan did not complete cleanly. I stopped safely.\n\n"
+            "No Gmail changes were made."
         )
 
     queue_output = str(run_data.get("queue_output_tail", ""))
@@ -136,28 +133,21 @@ def build_scan_approval_response(_: str = "") -> str:
         cursor = load_json(LATEST_GMAIL_SCAN_CURSOR)
         if cursor.get("next_page_token"):
             continuation = (
-                "\n\nThere may be more unread emails in your inbox. "
-                "Say 'continue sorting' to process the next safe batch of 5."
+                "\n\nSay continue sorting for the next 5.\n"
+                "Say queue to see this batch. Say next to review an item."
             )
         else:
             continuation = (
-                "\n\nNo more unread email pages were found. "
-                "Your inbox looks fully sorted for now."
+                "\n\nNo more pages. Inbox looks fully sorted.\n"
+                "Say queue to see this batch."
             )
     else:
-        continuation = ""
+        continuation = "\n\nSay queue to see this batch. Say next to review an item."
 
     return (
-        f"Done. I safely scanned {limit} unread inbox emails and built a new review queue.\n\n"
-        f"Result:\n"
-        f"- Total queued emails: {total}\n"
-        f"- Protected/manual review: {protected}\n"
-        f"- Pending low-risk review: {pending}\n\n"
-        "I only read Gmail and created a local queue.\n"
-        "I did not archive anything.\n"
-        "I did not move anything to Trash.\n"
-        "I did not mark anything read.\n"
-        "I did not reply or delete anything."
+        f"Done. Scanned {limit} unread emails.\n\n"
+        f"Total: {total} | Protected: {protected} | Pending: {pending}\n\n"
+        "Read-only. No Gmail changes."
         f"{continuation}"
     )
 
