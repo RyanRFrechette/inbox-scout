@@ -8,9 +8,10 @@ __pycache__/
 # Environment variables
 .env
 
-# OAuth tokens (both scopes — never commit)
+# OAuth tokens (all scopes — never commit)
 token.json
 token_modify.json
+token_settings.json
 
 # Gmail OAuth credentials
 credentials/
