@@ -32,3 +32,6 @@ data/exports/
 
 # Lock file
 requirements.lock.txt
+
+# Claude Code local state (memory, settings)
+.claude/
