@@ -22,6 +22,7 @@ class ScanQueuePlan:
     parsed_intent: str
     requested_limit: int | None
     sort_all: bool
+    is_continuation: bool
     target: str
     workflow_mode: str
     report_command: str | None
@@ -41,7 +42,7 @@ def make_plan_id() -> str:
     return datetime.now(timezone.utc).strftime("scanqueue_%Y%m%d_%H%M%S")
 
 
-def build_scan_queue_plan(message: str) -> ScanQueuePlan:
+def build_scan_queue_plan(message: str, continuation: bool = False) -> ScanQueuePlan:
     parsed = parse_sort_command(message)
 
     safety_notes = [
@@ -100,6 +101,7 @@ def build_scan_queue_plan(message: str) -> ScanQueuePlan:
         parsed_intent=parsed.intent,
         requested_limit=effective_limit,
         sort_all=parsed.sort_all,
+        is_continuation=continuation,
         target=parsed.target,
         workflow_mode=workflow_mode,
         report_command=report_command,

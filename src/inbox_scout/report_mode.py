@@ -1,6 +1,7 @@
 ﻿import argparse
 import json
-from datetime import datetime
+from datetime import datetime, timezone
+from pathlib import Path
 
 from rich.console import Console
 from rich.table import Table
@@ -12,6 +13,10 @@ from inbox_scout.rule_classifier import classify_email, load_json, load_lines
 from inbox_scout.paths import REPORTS_DIR, PROTECTED_SENDERS_FILE, PROTECTED_TERMS_FILE, RULES_FILE
 
 console = Console()
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PLANS_DIR = PROJECT_ROOT / "data" / "plans"
+LATEST_GMAIL_SCAN_CURSOR = PLANS_DIR / "latest_gmail_scan_cursor.json"
 
 
 def build_gmail_query(unread_only=False, days=None):
@@ -26,7 +31,7 @@ def build_gmail_query(unread_only=False, days=None):
     return " ".join(query_parts)
 
 
-def fetch_report_emails(limit=25, unread_only=False, days=None, page_size=25):
+def fetch_report_emails(limit=25, unread_only=False, days=None, page_size=25, initial_page_token=None):
     service = get_gmail_service()
     query = build_gmail_query(unread_only=unread_only, days=days)
 
@@ -34,7 +39,8 @@ def fetch_report_emails(limit=25, unread_only=False, days=None, page_size=25):
     page_size = max(1, min(int(page_size), 500))
 
     emails = []
-    page_token = None
+    page_token = initial_page_token
+    next_page_token = None
     page_count = 0
 
     while len(emails) < max_messages:
@@ -82,7 +88,8 @@ def fetch_report_emails(limit=25, unread_only=False, days=None, page_size=25):
             if len(emails) >= max_messages:
                 break
 
-        page_token = results.get("nextPageToken")
+        next_page_token = results.get("nextPageToken")
+        page_token = next_page_token
 
         if not page_token:
             break
@@ -91,7 +98,19 @@ def fetch_report_emails(limit=25, unread_only=False, days=None, page_size=25):
             break
 
     console.print(f"[dim]Total report emails fetched: {len(emails)} across {page_count} page(s)[/dim]")
-    return emails
+    return emails, next_page_token
+
+
+def save_scan_cursor(next_page_token, unread_only, batch_limit):
+    PLANS_DIR.mkdir(parents=True, exist_ok=True)
+    cursor = {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "next_page_token": next_page_token,
+        "unread_only": unread_only,
+        "batch_limit": batch_limit,
+        "source": "report_mode",
+    }
+    LATEST_GMAIL_SCAN_CURSOR.write_text(json.dumps(cursor, indent=2), encoding="utf-8")
 
 
 def classify_for_report(emails):
@@ -310,6 +329,7 @@ def parse_args():
     parser.add_argument("--days", type=int)
     parser.add_argument("--category", type=str)
     parser.add_argument("--export", choices=["md", "json", "both"], default="both")
+    parser.add_argument("--page-token", type=str, default=None)
 
     return parser.parse_args()
 
@@ -320,11 +340,12 @@ def main():
     console.print("\n[bold cyan]Inbox Scout Phase 5: Report Mode[/bold cyan]\n")
     console.print("[yellow]Read-only mode. No Gmail changes will be made.[/yellow]\n")
 
-    emails = fetch_report_emails(
+    emails, next_page_token = fetch_report_emails(
         limit=args.limit,
         unread_only=args.unread_only,
         days=args.days,
-        page_size=args.page_size
+        page_size=args.page_size,
+        initial_page_token=args.page_token,
     )
 
     results = classify_for_report(emails)
@@ -334,9 +355,17 @@ def main():
 
     json_path, md_path = save_report(results, args)
 
+    save_scan_cursor(next_page_token, args.unread_only, args.limit)
+
     console.print(f"\n[bold green]Report created safely.[/bold green]")
-    console.print(f"JSON report: {json_path}")
-    console.print(f"Markdown report: {md_path}")
+    console.print(f"JSON report: \n{json_path}")
+    console.print(f"Markdown report: \n{md_path}")
+
+    if next_page_token:
+        console.print("[dim]Gmail cursor saved. Say 'continue sorting' to scan the next batch.[/dim]")
+    else:
+        console.print("[dim]No further Gmail pages available. Inbox may be fully scanned.[/dim]")
+
     console.print("\n[yellow]No Gmail changes were made.[/yellow]\n")
 
 

@@ -15,6 +15,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PLANS_DIR = PROJECT_ROOT / "data" / "plans"
 LATEST_SCAN_QUEUE_PLAN = PLANS_DIR / "latest_scan_queue_plan.json"
 LATEST_SCAN_QUEUE_RUN = PLANS_DIR / "latest_scan_queue_run.json"
+LATEST_GMAIL_SCAN_CURSOR = PLANS_DIR / "latest_gmail_scan_cursor.json"
 
 MAX_SAFE_RUN_LIMIT = 5
 
@@ -51,6 +52,13 @@ def load_latest_plan() -> dict[str, Any]:
         return {}
 
     return json.loads(LATEST_SCAN_QUEUE_PLAN.read_text(encoding="utf-8-sig"))
+
+
+def load_cursor() -> dict[str, Any]:
+    if not LATEST_GMAIL_SCAN_CURSOR.exists():
+        return {}
+
+    return json.loads(LATEST_GMAIL_SCAN_CURSOR.read_text(encoding="utf-8-sig"))
 
 
 def tail_text(text: str, max_chars: int = 4000) -> str:
@@ -174,6 +182,7 @@ def main() -> None:
 
     limit = plan["requested_limit"]
     page_size = min(5, limit)
+    is_continuation = plan.get("is_continuation", False)
 
     report_args = [
         sys.executable,
@@ -187,6 +196,15 @@ def main() -> None:
         "--export",
         "both",
     ]
+
+    if is_continuation:
+        cursor = load_cursor()
+        saved_token = cursor.get("next_page_token")
+        if saved_token:
+            report_args.extend(["--page-token", saved_token])
+            notes.append("Continuation: using saved Gmail cursor to advance to next batch.")
+        else:
+            notes.append("Continuation requested but no cursor token found. Starting from first page.")
 
     queue_args = [
         sys.executable,

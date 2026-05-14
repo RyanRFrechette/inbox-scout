@@ -50,8 +50,8 @@ def load_queue_items() -> list[dict[str, Any]]:
     return []
 
 
-def sort_plan_message(text: str) -> str:
-    plan = build_scan_queue_plan(text)
+def sort_plan_message(text: str, continuation: bool = False) -> str:
+    plan = build_scan_queue_plan(text, continuation=continuation)
     save_plan(plan)
 
     if plan.workflow_mode == "blocked_phase_14_only":
@@ -69,9 +69,16 @@ def sort_plan_message(text: str) -> str:
         )
 
     if plan.sort_all:
+        if plan.is_continuation:
+            scan_line = "I will scan the next 5 unread emails from where the last batch left off."
+            action_line = "Want me to process the next safe batch now?"
+        else:
+            scan_line = "I will scan the next 5 unread emails and build a review queue."
+            action_line = "Want me to start the first safe batch now?"
+
         return (
             "I can sort your inbox safely in batches of 5 emails.\n\n"
-            "I will scan the next 5 unread emails and build a review queue.\n"
+            f"{scan_line}\n"
             "After each batch, say 'continue sorting' to process the next 5.\n\n"
             "Safety check:\n"
             "- I will only read Gmail.\n"
@@ -80,7 +87,7 @@ def sort_plan_message(text: str) -> str:
             "- I will not mark anything read.\n"
             "- I will not reply or delete anything.\n\n"
             "I did not scan Gmail yet.\n\n"
-            "Want me to start the first safe batch now?\n"
+            f"{action_line}\n"
             "Reply yes to continue, or cancel to stop."
         )
 
@@ -328,7 +335,7 @@ def handle_natural_message(text: str) -> str:
         "next batch",
         "keep sorting",
     ]):
-        return sort_plan_message("sort all")
+        return sort_plan_message("sort all", continuation=True)
 
     if any(phrase in msg for phrase in ["next", "next review", "needs review", "what needs my attention"]):
         return next_review_item()

@@ -14,6 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PLANS_DIR = PROJECT_ROOT / "data" / "plans"
 LATEST_SCAN_QUEUE_PLAN = PLANS_DIR / "latest_scan_queue_plan.json"
 LATEST_SCAN_QUEUE_RUN = PLANS_DIR / "latest_scan_queue_run.json"
+LATEST_GMAIL_SCAN_CURSOR = PLANS_DIR / "latest_gmail_scan_cursor.json"
 
 PLAN_MAX_AGE_MINUTES = 30
 
@@ -100,6 +101,17 @@ def build_scan_approval_response(_: str = "") -> str:
             "I did not scan Gmail. I did not touch Gmail."
         )
 
+    # If this is a continuation and the last batch already exhausted Gmail pages, stop early.
+    if plan.get("is_continuation"):
+        cursor = load_json(LATEST_GMAIL_SCAN_CURSOR)
+        if cursor and "next_page_token" in cursor and not cursor["next_page_token"]:
+            return (
+                "Your inbox looks fully sorted for now.\n\n"
+                "There were no more unread email pages after the last batch.\n\n"
+                "Say 'sort all' to start a fresh sort session from the beginning.\n\n"
+                "I did not scan Gmail. I did not touch Gmail."
+            )
+
     result = run_scan_queue_runner()
 
     run_data = load_json(LATEST_SCAN_QUEUE_RUN)
@@ -120,12 +132,20 @@ def build_scan_approval_response(_: str = "") -> str:
     is_sort_all = plan.get("sort_all") is True
     limit = plan.get("requested_limit") or 5
 
-    continuation = (
-        "\n\nThere may be more unread emails in your inbox. "
-        "Say 'continue sorting' to process the next safe batch of 5."
-        if is_sort_all
-        else ""
-    )
+    if is_sort_all:
+        cursor = load_json(LATEST_GMAIL_SCAN_CURSOR)
+        if cursor.get("next_page_token"):
+            continuation = (
+                "\n\nThere may be more unread emails in your inbox. "
+                "Say 'continue sorting' to process the next safe batch of 5."
+            )
+        else:
+            continuation = (
+                "\n\nNo more unread email pages were found. "
+                "Your inbox looks fully sorted for now."
+            )
+    else:
+        continuation = ""
 
     return (
         f"Done. I safely scanned {limit} unread inbox emails and built a new review queue.\n\n"
