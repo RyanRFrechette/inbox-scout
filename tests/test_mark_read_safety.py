@@ -17,6 +17,7 @@ import os
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -194,6 +195,134 @@ class TestNoMarkReadWithoutApproval(unittest.TestCase):
             result = _with_queue(items, build_mark_read_runner_message, apply=True)
         mock_svc.assert_not_called()
         self.assertIn("gmail not touched", result.lower())
+
+
+class TestHappyPathApply(unittest.TestCase):
+    def test_apply_calls_gmail_modify_with_unread_payload(self):
+        import inbox_scout.mark_read_runner as mrr
+
+        fresh_plan = {"created_at": datetime.now(timezone.utc).isoformat(), "eligible_count": 1}
+        queue = [_item()]
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as qf:
+            json.dump(queue, qf)
+            queue_tmp = qf.name
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as pf:
+            json.dump(fresh_plan, pf)
+            plan_tmp = pf.name
+
+        orig_q, orig_p = mrr.QUEUE_PATH, mrr.MARK_READ_PLAN_PATH
+        mrr.QUEUE_PATH = Path(queue_tmp)
+        mrr.MARK_READ_PLAN_PATH = Path(plan_tmp)
+        mock_svc = MagicMock()
+
+        try:
+            with patch("inbox_scout.mark_read_runner.get_modify_service", return_value=mock_svc):
+                result = build_mark_read_runner_message(apply=True)
+            queue_after = json.loads(Path(queue_tmp).read_text(encoding="utf-8"))
+        finally:
+            mrr.QUEUE_PATH = orig_q
+            mrr.MARK_READ_PLAN_PATH = orig_p
+            os.unlink(queue_tmp)
+            os.unlink(plan_tmp)
+
+        mock_svc.users.return_value.messages.return_value.modify.assert_called_once_with(
+            userId="me",
+            id="msg001",
+            body={"removeLabelIds": ["UNREAD"]},
+        )
+        mock_svc.users.return_value.messages.return_value.modify.return_value.execute.assert_called_once()
+        self.assertIn("marked 1 email", result.lower())
+        items = queue_after if isinstance(queue_after, list) else []
+        self.assertTrue(items[0].get("gmail_marked_read"))
+
+    def test_only_eligible_approved_items_are_touched(self):
+        import inbox_scout.mark_read_runner as mrr
+
+        fresh_plan = {"created_at": datetime.now(timezone.utc).isoformat(), "eligible_count": 1}
+        queue = [
+            _item(queue_id="q1", local_decision="keep", gmail_message_id="msg001"),
+            _item(queue_id="q2", manual_review=True, gmail_message_id="msg002"),
+            _item(queue_id="q3", local_decision="pending_review", gmail_message_id="msg003"),
+        ]
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as qf:
+            json.dump(queue, qf)
+            queue_tmp = qf.name
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as pf:
+            json.dump(fresh_plan, pf)
+            plan_tmp = pf.name
+
+        orig_q, orig_p = mrr.QUEUE_PATH, mrr.MARK_READ_PLAN_PATH
+        mrr.QUEUE_PATH = Path(queue_tmp)
+        mrr.MARK_READ_PLAN_PATH = Path(plan_tmp)
+        mock_svc = MagicMock()
+
+        try:
+            with patch("inbox_scout.mark_read_runner.get_modify_service", return_value=mock_svc):
+                build_mark_read_runner_message(apply=True)
+        finally:
+            mrr.QUEUE_PATH = orig_q
+            mrr.MARK_READ_PLAN_PATH = orig_p
+            os.unlink(queue_tmp)
+            os.unlink(plan_tmp)
+
+        modify = mock_svc.users.return_value.messages.return_value.modify
+        self.assertEqual(modify.call_count, 1)
+        call_kwargs = modify.call_args[1]
+        self.assertEqual(call_kwargs["id"], "msg001")
+
+
+class TestFreshnessGuard(unittest.TestCase):
+    def test_no_plan_file_blocks_apply(self):
+        import inbox_scout.mark_read_runner as mrr
+        nonexistent = Path(tempfile.gettempdir()) / "no_such_mark_read_plan.json"
+        orig_p = mrr.MARK_READ_PLAN_PATH
+        mrr.MARK_READ_PLAN_PATH = nonexistent
+        try:
+            result = _with_queue([_item()], build_mark_read_runner_message, apply=True)
+        finally:
+            mrr.MARK_READ_PLAN_PATH = orig_p
+        self.assertIn("no mark-read plan found", result.lower())
+        self.assertIn("gmail not touched", result.lower())
+
+    def test_expired_plan_blocks_apply(self):
+        import inbox_scout.mark_read_runner as mrr
+        old_plan = {
+            "created_at": (datetime.now(timezone.utc) - timedelta(minutes=121)).isoformat(),
+            "eligible_count": 1,
+        }
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as pf:
+            json.dump(old_plan, pf)
+            plan_tmp = pf.name
+        orig_p = mrr.MARK_READ_PLAN_PATH
+        mrr.MARK_READ_PLAN_PATH = Path(plan_tmp)
+        try:
+            result = _with_queue([_item()], build_mark_read_runner_message, apply=True)
+        finally:
+            mrr.MARK_READ_PLAN_PATH = orig_p
+            os.unlink(plan_tmp)
+        self.assertIn("expired", result.lower())
+        self.assertIn("gmail not touched", result.lower())
+
+    def test_fresh_plan_allows_apply(self):
+        import inbox_scout.mark_read_runner as mrr
+        fresh_plan = {"created_at": datetime.now(timezone.utc).isoformat(), "eligible_count": 1}
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as pf:
+            json.dump(fresh_plan, pf)
+            plan_tmp = pf.name
+        orig_p = mrr.MARK_READ_PLAN_PATH
+        mrr.MARK_READ_PLAN_PATH = Path(plan_tmp)
+        mock_svc = MagicMock()
+        try:
+            with patch("inbox_scout.mark_read_runner.get_modify_service", return_value=mock_svc):
+                result = _with_queue([_item()], build_mark_read_runner_message, apply=True)
+        finally:
+            mrr.MARK_READ_PLAN_PATH = orig_p
+            os.unlink(plan_tmp)
+        mock_svc.users.return_value.messages.return_value.modify.assert_called_once()
+        self.assertNotIn("expired", result.lower())
+        self.assertNotIn("no mark-read plan found", result.lower())
 
 
 if __name__ == "__main__":

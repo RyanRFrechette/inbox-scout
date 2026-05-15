@@ -18,6 +18,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 QUEUE_PATH = PROJECT_ROOT / "data" / "review_queue" / "latest_queue.json"
 LOG_DIR = PROJECT_ROOT / "data" / "logs"
 LOG_PATH = LOG_DIR / "mark_read_actions.jsonl"
+MARK_READ_PLAN_PATH = PROJECT_ROOT / "data" / "plans" / "latest_mark_read_plan.json"
+MARK_READ_PLAN_MAX_AGE_MINUTES = 60
 
 PROTECTED_CATEGORIES = {
     "financial",
@@ -242,6 +244,12 @@ def build_mark_read_plan_message() -> str:
             "Gmail not touched."
         )
 
+    MARK_READ_PLAN_PATH.parent.mkdir(parents=True, exist_ok=True)
+    MARK_READ_PLAN_PATH.write_text(
+        json.dumps({"created_at": now_iso(), "eligible_count": len(eligible)}, indent=2),
+        encoding="utf-8",
+    )
+
     lines = [f"Mark-read plan: {len(eligible)} eligible email(s).", ""]
     lines.append("Eligible (safe reviewed, not protected, risk <= 40):")
     for item in eligible:
@@ -280,12 +288,45 @@ def build_mark_read_runner_message(apply: bool = False) -> str:
             "Say 'confirm mark read' to apply."
         )
 
+    if not MARK_READ_PLAN_PATH.exists():
+        return (
+            "No mark-read plan found. Say 'mark reviewed as read' first.\n\n"
+            "Gmail not touched."
+        )
+    try:
+        plan_data = json.loads(MARK_READ_PLAN_PATH.read_text(encoding="utf-8"))
+        created_at = datetime.fromisoformat(str(plan_data.get("created_at", "")))
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        age_minutes = (datetime.now(timezone.utc) - created_at).total_seconds() / 60
+        if age_minutes > MARK_READ_PLAN_MAX_AGE_MINUTES:
+            return (
+                f"Mark-read plan expired ({age_minutes:.0f} min old). "
+                f"Say 'mark reviewed as read' again to rebuild.\n\nGmail not touched."
+            )
+    except Exception as e:
+        return f"Mark-read plan unreadable: {e}\n\nGmail not touched."
+
     service = get_modify_service()
     marked = 0
     errors = 0
 
     for item in eligible:
         msg_id = get_message_id(item)
+        if not msg_id:
+            errors += 1
+            log_action({
+                "timestamp": now_iso(),
+                "action": "SKIPPED",
+                "queue_id": get_queue_id(item),
+                "message_id": None,
+                "subject": get_subject(item),
+                "category": get_category(item),
+                "risk": get_risk(item),
+                "reason": "Missing message ID (belt-and-suspenders skip)",
+                "gmail_changed": False,
+            })
+            continue
         try:
             service.users().messages().modify(
                 userId="me",
