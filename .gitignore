@@ -17,6 +17,9 @@ token_settings.json
 credentials/
 credentials/*.json
 
+# Model routing settings (local overrides — not committed)
+config/model_settings.json
+
 # Telegram config and state (contains bot tokens and chat IDs)
 config/telegram_config.json
 config/telegram_config.before_phase13t_*.json
