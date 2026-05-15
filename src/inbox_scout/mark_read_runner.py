@@ -49,6 +49,7 @@ PROTECTED_CATEGORIES = {
     "receipt",
     "receipts",
     "insurance",
+    "personal",
     "manual review",
 }
 
@@ -157,7 +158,10 @@ def is_protected(item: dict[str, Any]) -> bool:
     if is_true(item.get("protected")) or is_true(item.get("protected_review")):
         return True
 
-    return category in PROTECTED_CATEGORIES
+    if category in PROTECTED_CATEGORIES:
+        return True
+    # Catch compound AI categories like "Bills/receipts", "Job/career", "Client/business"
+    return any(part.strip() in PROTECTED_CATEGORIES for part in category.split("/"))
 
 
 def already_marked_read(item: dict[str, Any]) -> bool:
@@ -186,6 +190,136 @@ def evaluate_item(item: dict[str, Any]) -> tuple[bool, str]:
         return False, "Missing Gmail message ID"
 
     return True, "Eligible to mark as read"
+
+
+def evaluate_mark_read_candidate(item: dict[str, Any]) -> tuple[bool, str]:
+    """Eligibility for mark-as-read: safe reviewed items; archive/trash not required."""
+    if already_marked_read(item):
+        return False, "Already marked read"
+    if is_protected(item):
+        return False, "Protected/manual-review"
+    if get_risk(item) > 40:
+        return False, "Risk too high"
+    if not get_message_id(item):
+        return False, "Missing Gmail message ID"
+    return True, "Eligible to mark as read"
+
+
+def build_mark_read_plan_message() -> str:
+    if not QUEUE_PATH.exists():
+        return "No queue yet. Sort your inbox first."
+    try:
+        _, items = load_queue()
+    except Exception as e:
+        return f"Could not load queue: {e}\n\nGmail not touched."
+
+    eligible = []
+    skipped = 0
+    for item in items:
+        ok, _ = evaluate_mark_read_candidate(item)
+        if ok:
+            eligible.append(item)
+        else:
+            skipped += 1
+
+    if not eligible:
+        return (
+            f"No safe reviewed emails to mark as read.\n\n"
+            f"Skipped: {skipped} (protected, manual review, or high risk).\n\n"
+            "Gmail not touched."
+        )
+
+    lines = [f"Mark-read plan: {len(eligible)} eligible email(s).", ""]
+    lines.append("Eligible (safe reviewed, not protected, risk <= 40):")
+    for item in eligible:
+        lines.append(
+            f"- ID {get_queue_id(item)}: {get_subject(item)[:55]}"
+            f" | risk {get_risk(item)} | {get_category(item)}"
+        )
+    lines += [
+        "",
+        f"Skipped (protected/manual/high-risk): {skipped}",
+        "",
+        "No Gmail changes yet.",
+        "",
+        "Say 'confirm mark read' to mark these as read in Gmail.",
+    ]
+    return "\n".join(lines)
+
+
+def build_mark_read_runner_message(apply: bool = False) -> str:
+    if not QUEUE_PATH.exists():
+        return "No queue yet. Sort your inbox first."
+    try:
+        original, items = load_queue()
+    except Exception as e:
+        return f"Could not load queue: {e}\n\nGmail not touched."
+
+    eligible = [item for item in items if evaluate_mark_read_candidate(item)[0]]
+
+    if not eligible:
+        return "No safe reviewed emails to mark as read. Gmail not touched."
+
+    if not apply:
+        return (
+            f"Dry run: {len(eligible)} email(s) would be marked read.\n\n"
+            "No Gmail changes made.\n\n"
+            "Say 'confirm mark read' to apply."
+        )
+
+    service = get_modify_service()
+    marked = 0
+    errors = 0
+
+    for item in eligible:
+        msg_id = get_message_id(item)
+        try:
+            service.users().messages().modify(
+                userId="me",
+                id=msg_id,
+                body={"removeLabelIds": ["UNREAD"]},
+            ).execute()
+            item["gmail_marked_read"] = True
+            item["gmail_marked_read_at"] = now_iso()
+            item["gmail_read_action_type"] = "marked_read"
+            item["gmail_read_action_taken"] = True
+            marked += 1
+            log_action({
+                "timestamp": now_iso(),
+                "action": "MARKED READ",
+                "queue_id": get_queue_id(item),
+                "message_id": msg_id,
+                "subject": get_subject(item),
+                "category": get_category(item),
+                "risk": get_risk(item),
+                "reason": "Confirmed mark-read command",
+                "gmail_changed": True,
+            })
+        except Exception as e:
+            errors += 1
+            log_action({
+                "timestamp": now_iso(),
+                "action": "ERROR",
+                "queue_id": get_queue_id(item),
+                "message_id": msg_id,
+                "subject": get_subject(item),
+                "category": get_category(item),
+                "risk": get_risk(item),
+                "reason": f"Mark read failed: {e}",
+                "gmail_changed": False,
+            })
+
+    save_queue(original)
+
+    lines = [f"Marked {marked} email(s) as read in Gmail."]
+    if errors:
+        lines.append(f"Errors: {errors}")
+    lines += [
+        "",
+        "Protected and manual review emails were not touched.",
+        "Gmail not touched for anything outside the eligible set.",
+    ]
+    return "\n".join(lines)
 
 
 def get_modify_service():

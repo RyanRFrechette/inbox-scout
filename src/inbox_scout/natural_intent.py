@@ -23,6 +23,7 @@ from inbox_scout.cleanup_control import build_cleanup_status_message, build_canc
 from inbox_scout.trash_sender_block_plan import build_sender_block_plan_message
 from inbox_scout.trash_sender_block_runner import build_sender_block_runner_message
 from inbox_scout.model_router import get_provider, set_provider, model_status_message
+from inbox_scout.mark_read_runner import build_mark_read_plan_message, build_mark_read_runner_message
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -444,6 +445,21 @@ def handle_natural_message(text: str) -> str:
         "block the trash senders",
     ]):
         return build_sender_block_plan_message()
+
+    if any(phrase in msg for phrase in [
+        "mark reviewed as read",
+        "mark safe sorted as read",
+        "mark read plan",
+        "what can be marked read",
+    ]):
+        return build_mark_read_plan_message()
+
+    if any(phrase in msg for phrase in [
+        "confirm mark read",
+        "apply mark read",
+        "run mark read",
+    ]):
+        return build_mark_read_runner_message(apply=True)
 
     if any(phrase in msg for phrase in [
         "sort",
