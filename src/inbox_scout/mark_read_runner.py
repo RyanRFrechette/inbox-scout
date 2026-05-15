@@ -192,12 +192,25 @@ def evaluate_item(item: dict[str, Any]) -> tuple[bool, str]:
     return True, "Eligible to mark as read"
 
 
+REVIEWED_SAFE_DECISIONS = {"keep", "ignore", "possible archive later"}
+
+
+def is_explicitly_reviewed(item: dict[str, Any]) -> bool:
+    """True only if the item was explicitly approved via the review/approval flow."""
+    if norm(get_decision(item)) in REVIEWED_SAFE_DECISIONS:
+        return True
+    return norm(item.get("gmail_action_type")) in {"archived", "trashed"}
+
+
 def evaluate_mark_read_candidate(item: dict[str, Any]) -> tuple[bool, str]:
-    """Eligibility for mark-as-read: safe reviewed items; archive/trash not required."""
+    """Eligibility for mark-as-read: requires explicit review/approval, not just low risk."""
     if already_marked_read(item):
         return False, "Already marked read"
     if is_protected(item):
         return False, "Protected/manual-review"
+    if not is_explicitly_reviewed(item):
+        decision = norm(get_decision(item))
+        return False, f"Not explicitly reviewed/approved (decision: {decision})"
     if get_risk(item) > 40:
         return False, "Risk too high"
     if not get_message_id(item):

@@ -26,6 +26,7 @@ from inbox_scout.mark_read_runner import (
     build_mark_read_plan_message,
     build_mark_read_runner_message,
     evaluate_mark_read_candidate,
+    is_explicitly_reviewed,
 )
 
 
@@ -37,6 +38,7 @@ def _item(**overrides):
         "risk_score": 20,
         "manual_review": False,
         "protected": False,
+        "local_decision": "keep",
         "gmail_message_id": "msg001",
         "gmail_marked_read": False,
     }
@@ -58,9 +60,35 @@ def _with_queue(items, fn, *args, **kwargs):
 
 
 class TestEligibility(unittest.TestCase):
-    def test_safe_reviewed_email_eligible(self):
-        ok, reason = evaluate_mark_read_candidate(_item())
+    def test_keep_decision_eligible(self):
+        ok, reason = evaluate_mark_read_candidate(_item(local_decision="keep"))
         self.assertTrue(ok, reason)
+
+    def test_ignore_decision_eligible(self):
+        ok, reason = evaluate_mark_read_candidate(_item(local_decision="ignore"))
+        self.assertTrue(ok, reason)
+
+    def test_possible_archive_later_eligible(self):
+        ok, reason = evaluate_mark_read_candidate(_item(local_decision="possible_archive_later"))
+        self.assertTrue(ok, reason)
+
+    def test_already_trashed_eligible(self):
+        ok, reason = evaluate_mark_read_candidate(_item(local_decision="pending_review", gmail_action_type="trashed"))
+        self.assertTrue(ok, reason)
+
+    def test_already_archived_eligible(self):
+        ok, reason = evaluate_mark_read_candidate(_item(local_decision="pending_review", gmail_action_type="archived"))
+        self.assertTrue(ok, reason)
+
+    def test_pending_review_excluded(self):
+        ok, reason = evaluate_mark_read_candidate(_item(local_decision="pending_review"))
+        self.assertFalse(ok)
+        self.assertIn("pending review", reason)
+
+    def test_review_later_excluded(self):
+        ok, reason = evaluate_mark_read_candidate(_item(local_decision="review_later"))
+        self.assertFalse(ok)
+        self.assertIn("review later", reason)
 
     def test_manual_review_excluded(self):
         ok, _ = evaluate_mark_read_candidate(_item(manual_review=True))
@@ -134,7 +162,11 @@ class TestNoMarkReadWithoutApproval(unittest.TestCase):
         self.assertIn("no gmail changes", result.lower())
 
     def test_plan_counts_eligible_correctly(self):
-        items = [_item(queue_id="q1"), _item(queue_id="q2", manual_review=True)]
+        items = [
+            _item(queue_id="q1", local_decision="keep"),
+            _item(queue_id="q2", manual_review=True),
+            _item(queue_id="q3", local_decision="pending_review"),
+        ]
         result = _with_queue(items, build_mark_read_plan_message)
         self.assertIn("1 eligible", result.lower())
         self.assertIn("skipped", result.lower())
