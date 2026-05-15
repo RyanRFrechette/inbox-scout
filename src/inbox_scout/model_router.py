@@ -209,12 +209,17 @@ def classify_with_provider(email: dict, rule_result: dict, batch_size: int = 1) 
     """Classify an email using the configured provider."""
     provider = get_provider()
 
-    # Auto mode: skip AI entirely for obvious low-risk newsletter/promo
+    # Auto mode: skip AI entirely for obvious low-risk newsletter/promo.
+    # Build a complete dict with all REQUIRED_KEYS so downstream display code never KeyErrors.
     if provider == "auto" and is_obvious_trash(rule_result):
         return {
-            **rule_result,
-            "ai_skipped": True,
+            "category": rule_result.get("category", "Newsletter"),
+            "confidence_score": _normalize_score(rule_result.get("confidence_score", 80)),
+            "risk_score": _normalize_score(rule_result.get("risk_score", 20)),
             "reason": "Obvious rule trash — no AI needed.",
+            "suggested_action": rule_result.get("suggested_action", "Safe to archive."),
+            "manual_review": False,
+            "ai_skipped": True,
         }
 
     active = get_active_provider(batch_size=batch_size)

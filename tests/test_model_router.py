@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from inbox_scout.model_router import (
     AUTO_MASS_THRESHOLD,
+    REQUIRED_KEYS,
     VALID_PROVIDERS,
     get_active_provider,
     get_provider,
@@ -226,6 +227,19 @@ class TestClassifyWithProvider(unittest.TestCase):
                 set_provider("auto")
                 result = classify_with_provider(self._email(), self._obvious_rule(), batch_size=5)
         self.assertTrue(result.get("ai_skipped"))
+
+    def test_auto_obvious_trash_returns_all_required_keys(self):
+        # rule_result missing confidence_score and suggested_action — common for rule-only results
+        minimal_rule = {"category": "Newsletter", "risk_score": 20, "manual_review": False}
+        with tempfile.TemporaryDirectory() as tmp:
+            with _settings_file_patch(tmp):
+                set_provider("auto")
+                result = classify_with_provider(self._email(), minimal_rule, batch_size=5)
+        self.assertTrue(result.get("ai_skipped"))
+        for key in REQUIRED_KEYS:
+            self.assertIn(key, result, f"auto-skip result missing key: {key}")
+        _ = result["confidence_score"]
+        _ = result["suggested_action"]
 
     def test_local_calls_ollama(self):
         with tempfile.TemporaryDirectory() as tmp:
