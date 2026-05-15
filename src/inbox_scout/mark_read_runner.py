@@ -241,6 +241,7 @@ def build_mark_read_plan_message() -> str:
         return (
             f"No safe reviewed emails to mark as read.\n\n"
             f"Skipped: {skipped} (protected, manual review, or high risk).\n\n"
+            "After reviewing safe emails, say 'mark reviewed as read' again to build a fresh plan.\n\n"
             "Gmail not touched."
         )
 

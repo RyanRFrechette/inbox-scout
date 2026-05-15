@@ -457,7 +457,6 @@ def handle_natural_message(text: str) -> str:
     if any(phrase in msg for phrase in [
         "confirm mark read",
         "apply mark read",
-        "run mark read",
     ]):
         return build_mark_read_runner_message(apply=True)
 
