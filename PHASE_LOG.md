@@ -355,3 +355,14 @@ New command: "block senders in trash" / "block all senders in trash"
 - Re-authorize Gmail with `gmail.settings.basic` scope to enable filter creation
 - Phase 14: Permanent delete mode (nuclear, disabled until explicitly enabled)
 - Portfolio/cloud deployment planning
+
+## 2026-05-14 - OpenRouter model switching checkpoint
+- Commit 8447418 added OpenRouter model switching and /model commands
+- Added src/inbox_scout/model_router.py
+- Updated ai_classifier.py, report_mode.py, and natural_intent.py
+- Added tests/test_model_router.py
+- Tests passed: 37/37 model-router tests
+- /review passed provider-routing safety, API key handling, local default behavior, auto-mode behavior, and confirmed no Gmail writes/tokens/secrets/OAuth/logs/queues/data were touched
+- Review noted two cleanup items still pending: gitignore config/model_settings.json and add classify_with_ai protected/manual_review override test
+- Claude returned 529 Overloaded twice before the cleanup commit could run
+- Next session must complete the cleanup commit before setting OPENROUTER_API_KEY or testing OpenRouter

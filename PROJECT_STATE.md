@@ -3819,3 +3819,13 @@ To enable: re-authorize Gmail adding the settings scope.
 
 Gmail changes: 0 (scope not yet provisioned)
 Permanent deletes: 0
+
+## Sign-off checkpoint - 2026-05-14
+- Last good commit: 8447418 feat: add OpenRouter model switching
+- Review result: PASS with two follow-up action items
+- Claude 529 overloaded twice, so the follow-up fix did not run yet
+- No new commit after 8447418
+- Git status at Claude handoff: clean, 1 commit ahead of origin
+- Do not set OPENROUTER_API_KEY yet
+- Do not run OpenRouter live API testing yet
+- Pending first step next session: add config/model_settings.json to .gitignore, remove it from git tracking only, add protected/manual_review override test, then commit fix: harden model routing safety defaults
