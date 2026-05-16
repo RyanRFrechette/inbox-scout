@@ -39,16 +39,33 @@ REQUIRED_KEYS = [
     "manual_review",
 ]
 
+# Only these rule-identified categories hard-override AI. All others let AI decide.
+_ALWAYS_PROTECTED_RULE_CATEGORIES = frozenset({
+    "finance",
+    "bills/receipts",
+    "legal",
+    "medical",
+    "security alert",
+    "job/career",
+    "client/business",
+    "warranty/support",
+    "personal",
+    "important",
+    "needs reply",
+})
+
 
 def classify_with_ai(email, rule_result, batch_size: int = 1):
     validated = classify_with_provider(email, rule_result, batch_size=batch_size)
 
     if rule_result.get("manual_review"):
-        validated["category"] = rule_result.get("category", "Manual review")
-        validated["manual_review"] = True
-        validated["risk_score"] = max(validated.get("risk_score", 0), rule_result.get("risk_score", 90))
-        validated["suggested_action"] = "Review manually before taking action."
-        validated["reason"] = "Protected rule category preserved. " + str(validated.get("reason", ""))
+        rule_category = (rule_result.get("category") or "").lower().strip()
+        if rule_category in _ALWAYS_PROTECTED_RULE_CATEGORIES:
+            validated["category"] = rule_result.get("category", "Manual review")
+            validated["manual_review"] = True
+            validated["risk_score"] = max(validated.get("risk_score", 0), rule_result.get("risk_score", 90))
+            validated["suggested_action"] = "Review manually before taking action."
+            validated["reason"] = "Protected rule category preserved. " + str(validated.get("reason", ""))
 
     return validated
 
