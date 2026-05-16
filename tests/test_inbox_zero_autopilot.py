@@ -319,5 +319,111 @@ class TestProcessNonTrashItems(unittest.TestCase):
         svc.users().messages().modify.assert_not_called()
 
 
+class TestParseTrashedCount(unittest.TestCase):
+    def setUp(self):
+        from inbox_scout.autopilot_cleanup import _parse_trashed_count
+        self.parse = _parse_trashed_count
+
+    def test_parse_5_moved(self):
+        self.assertEqual(self.parse("Done. Moved 5 email(s) to Gmail Trash for review."), 5)
+
+    def test_parse_1_moved(self):
+        self.assertEqual(self.parse("Done. Moved 1 email(s) to Gmail Trash for review."), 1)
+
+    def test_parse_zero_on_no_match(self):
+        self.assertEqual(self.parse("No candidates passed safety validation.\n\nGmail not touched."), 0)
+
+    def test_parse_zero_on_error_msg(self):
+        self.assertEqual(self.parse("Cleanup move failed.\n\nGmail not touched."), 0)
+
+
+class TestLabelFailNoMarkRead(unittest.TestCase):
+    def test_label_fail_skips_mark_read(self):
+        """If label lookup/create fails, email must not be marked read."""
+        from inbox_scout.autopilot_cleanup import _process_non_trash_items
+
+        svc = MagicMock()
+        svc.users().labels().list.return_value.execute.side_effect = Exception("label API error")
+        items = [{"gmail_message_id": "MSG099", "category": "finance", "risk_score": 10}]
+        result = _process_non_trash_items(svc, items, {})
+
+        self.assertEqual(result["errors"], 1)
+        self.assertEqual(result["marked_read"], 0)
+        svc.users().messages().modify.assert_not_called()
+
+
+class TestUncertainEmailGetsReviewLabel(unittest.TestCase):
+    def _make_service(self):
+        svc = MagicMock()
+        svc.users().labels().list(userId="me").execute.return_value = {"labels": []}
+        svc.users().labels().create.return_value.execute.return_value = {"id": "Label_review"}
+        svc.users().messages().modify.return_value.execute.return_value = {}
+        return svc
+
+    def test_uncertain_labeled_review_and_marked_read(self):
+        from inbox_scout.autopilot_cleanup import _process_non_trash_items
+
+        svc = self._make_service()
+        items = [{"gmail_message_id": "MSG010", "category": "unknown_xyz", "risk_score": 50}]
+        result = _process_non_trash_items(svc, items, {})
+
+        self.assertEqual(result["labeled"], 1)
+        self.assertEqual(result["marked_read"], 1)
+        create_call = svc.users().labels().create.call_args
+        self.assertIn("InboxScout/Review", str(create_call))
+
+
+class TestAutopilotLoopAlwaysPageOne(unittest.TestCase):
+    def test_loop_never_passes_continuation(self):
+        """Loop must always call build_scan_queue_plan without continuation=True."""
+        from unittest.mock import patch, MagicMock
+        from inbox_scout import autopilot_cleanup
+
+        continuation_values = []
+
+        def capture_plan(msg, continuation=False, cleanup_mode=False):
+            continuation_values.append(continuation)
+            p = MagicMock()
+            p.workflow_mode = "commands_planned"
+            p.requested_limit = 5
+            return p
+
+        with (
+            patch.object(autopilot_cleanup, "build_scan_queue_plan", side_effect=capture_plan),
+            patch.object(autopilot_cleanup, "save_plan"),
+            patch.object(autopilot_cleanup, "_run_scan", return_value=MagicMock(returncode=0)),
+            patch.object(autopilot_cleanup, "_load_json", return_value={"status": "complete"}),
+            patch.object(autopilot_cleanup, "_load_items_from_queue", return_value=[]),
+            patch.object(autopilot_cleanup, "_get_modify_service_for_autopilot", return_value=MagicMock()),
+        ):
+            autopilot_cleanup.run_inbox_zero_autopilot("sort all")
+
+        self.assertGreater(len(continuation_values), 0)
+        self.assertTrue(all(not c for c in continuation_values),
+                        "Loop must never use continuation=True")
+
+    def test_loop_stops_when_scan_returns_empty(self):
+        """Loop stops when scan returns 0 items (inbox empty), not via cursor check."""
+        from unittest.mock import patch, MagicMock
+        from inbox_scout import autopilot_cleanup
+
+        mock_plan = MagicMock()
+        mock_plan.workflow_mode = "commands_planned"
+        mock_plan.requested_limit = 5
+
+        with (
+            patch.object(autopilot_cleanup, "build_scan_queue_plan", return_value=mock_plan),
+            patch.object(autopilot_cleanup, "save_plan"),
+            patch.object(autopilot_cleanup, "_run_scan", return_value=MagicMock(returncode=0)),
+            patch.object(autopilot_cleanup, "_load_json", return_value={"status": "complete"}),
+            patch.object(autopilot_cleanup, "_load_items_from_queue", return_value=[]),
+            patch.object(autopilot_cleanup, "_get_modify_service_for_autopilot", return_value=MagicMock()),
+        ):
+            result = autopilot_cleanup.run_inbox_zero_autopilot("sort all")
+
+        self.assertIn("Scanned: 0", result)
+        self.assertIn("Nothing permanently deleted", result)
+
+
 if __name__ == "__main__":
     unittest.main()

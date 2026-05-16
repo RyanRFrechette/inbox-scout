@@ -180,6 +180,20 @@ def _item_already_handled(item: dict) -> bool:
     return _norm_cat(item.get("gmail_action_type")) in {"trashed", "archived"}
 
 
+def _parse_trashed_count(runner_msg: str) -> int:
+    m = re.search(r"Moved (\d+) email", runner_msg)
+    return int(m.group(1)) if m else 0
+
+
+def _beep_once() -> None:
+    """Emit one terminal bell so the watcher window chimes at run completion."""
+    try:
+        sys.stdout.write("\a")
+        sys.stdout.flush()
+    except Exception:
+        pass
+
+
 def _pick_inboxscout_label(item: dict) -> str:
     cat = _norm_cat(item.get("category") or item.get("final_category") or "")
     if cat in CATEGORY_TO_LABEL:
@@ -250,11 +264,12 @@ def _process_non_trash_items(service: Any, items: list[dict], label_cache: dict)
         label_name = _pick_inboxscout_label(item)
         label_id = _get_or_create_label(service, label_name, label_cache)
 
-        add_labels: list[str] = []
-        remove_labels: list[str] = ["UNREAD"]
+        if label_id is None:
+            errors += 1
+            continue
 
-        if label_id:
-            add_labels.append(label_id)
+        add_labels: list[str] = [label_id]
+        remove_labels: list[str] = ["UNREAD"]
 
         should_archive = not protected and risk <= 30 and cat in SAFE_ARCHIVE_AFTER_LABEL
         if should_archive:
@@ -264,19 +279,12 @@ def _process_non_trash_items(service: Any, items: list[dict], label_cache: dict)
             protected_count += 1
 
         try:
-            body: dict = {}
-            if add_labels:
-                body["addLabelIds"] = add_labels
-            if remove_labels:
-                body["removeLabelIds"] = remove_labels
-            if body:
-                service.users().messages().modify(
-                    userId="me",
-                    id=msg_id,
-                    body=body,
-                ).execute()
-            if add_labels:
-                labeled += 1
+            service.users().messages().modify(
+                userId="me",
+                id=msg_id,
+                body={"addLabelIds": add_labels, "removeLabelIds": remove_labels},
+            ).execute()
+            labeled += 1
             if should_archive:
                 archived += 1
             marked_read += 1
@@ -310,25 +318,23 @@ def run_inbox_zero_autopilot(text: str) -> str:
     try:
         service = _get_modify_service_for_autopilot()
     except Exception as e:
+        _beep_once()
         return f"Could not connect to Gmail.\n\n{e}\n\nGmail not touched."
 
     label_cache: dict = {}
     cursor_path = PLANS_DIR / "latest_gmail_scan_cursor.json"
 
-    # Always start from page 1 for a fresh "sort all".
+    # Always start from page 1; delete any saved cursor.
     if cursor_path.exists():
         cursor_path.unlink()
-
-    is_first_batch = True
 
     while total_scanned < cap:
         remaining = cap - total_scanned
         batch_limit = min(AUTOPILOT_MAX_LIMIT, remaining)
 
-        plan = build_scan_queue_plan(
-            f"sort {batch_limit} emails",
-            continuation=not is_first_batch,
-        )
+        # Never use continuation — always scan page 1 so that emails removed
+        # from INBOX/UNREAD by prior actions don't cause stale page-token skips.
+        plan = build_scan_queue_plan(f"sort {batch_limit} emails")
         if plan.workflow_mode != "commands_planned":
             break
         plan.requested_limit = min(plan.requested_limit or batch_limit, AUTOPILOT_MAX_LIMIT)
@@ -347,19 +353,19 @@ def run_inbox_zero_autopilot(text: str) -> str:
 
         items = _load_items_from_queue()
         if not items:
-            break
+            break  # Inbox fully processed.
 
         batch_count = len(items)
         total_scanned += batch_count
-        is_first_batch = False
 
-        # Trash safe candidates, then reload queue to see updated state.
+        # Trash safe candidates; count only actual successes.
         cleanup_plan = build_inbox_cleanup_plan()
         if cleanup_plan.trash_candidate_count > 0:
-            build_inbox_cleanup_runner_message()
+            runner_msg = build_inbox_cleanup_runner_message()
+            actual_trashed = _parse_trashed_count(runner_msg)
             items = _load_items_from_queue()
-            total_trashed += cleanup_plan.trash_candidate_count
-            total_marked_read += cleanup_plan.trash_candidate_count
+            total_trashed += actual_trashed
+            total_marked_read += actual_trashed
 
         # Label + mark-read non-trash items.
         result_data = _process_non_trash_items(service, items, label_cache)
@@ -368,11 +374,6 @@ def run_inbox_zero_autopilot(text: str) -> str:
         total_marked_read += result_data["marked_read"]
         total_protected += result_data["protected"]
         total_errors += result_data["errors"]
-
-        # Stop if Gmail has no next page (inbox fully processed).
-        cursor = _load_json(cursor_path)
-        if not cursor.get("next_page_token"):
-            break
 
     cap_reached = total_scanned >= cap
     lines = [
@@ -390,4 +391,5 @@ def run_inbox_zero_autopilot(text: str) -> str:
     if cap_reached:
         lines.extend(["", f"Safety cap: {cap} emails. Run again to continue."])
     lines.extend(["", "Nothing permanently deleted. All recoverable from Trash or Gmail."])
+    _beep_once()
     return "\n".join(lines)
