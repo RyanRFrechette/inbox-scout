@@ -26,6 +26,7 @@ from inbox_scout.trash_candidate_plan import (
     risk_int,
     _signal_text,
 )
+from inbox_scout.trash_execution_runner import find_protected_text_terms, has_protected_text
 
 _SECURITY_DANGER = frozenset({
     "login", "password", "security alert", "security",
@@ -106,10 +107,18 @@ def audit_item(item: dict[str, Any]) -> tuple[str, str, str]:
         return "unclear", "blocked_by_protected_danger_signal", label
 
     if category in TRASH_SAFE_CATEGORIES:
+        if has_protected_text(item):
+            matched = find_protected_text_terms(item)
+            terms = ", ".join(matched[:3]) if matched else "unknown"
+            return "runner_block", "final_runner_blocked_by_protected_text", f"Runner protected text: {terms}."
         return "trash_candidate", "trash_candidate_newsletter_promotion", "Newsletter/Promotion — low risk."
 
     if category in MARKETING_RESCUE_CATEGORIES:
         if has_obvious_marketing_signal(item):
+            if has_protected_text(item):
+                matched = find_protected_text_terms(item)
+                terms = ", ".join(matched[:3]) if matched else "unknown"
+                return "runner_block", "final_runner_blocked_by_protected_text", f"Runner protected text: {terms}."
             return "trash_candidate", "trash_candidate_marketing_rescue", "Marketing signal in Personal/Archive candidate."
         return "unclear", "unclear_no_strong_marketing_signal", "Personal/Archive candidate — no marketing signal."
 
@@ -157,6 +166,7 @@ def print_audit_table() -> None:
         "protected": "red",
         "trash_candidate": "green",
         "unclear": "yellow",
+        "runner_block": "magenta",
         "handled": "dim",
     }
     for row in rows:

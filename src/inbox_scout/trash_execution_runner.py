@@ -211,17 +211,25 @@ def trash_execution_enabled_in_config() -> bool:
     return is_true(config.get("telegram_trash_execution_enabled"))
 
 
+def _protected_text_combined(item: dict[str, Any]) -> str:
+    return " ".join([
+        norm(get_category(item)),
+        norm(get_sender(item)),
+        norm(get_subject(item)),
+        norm(item.get("snippet")),
+        norm(item.get("reason")),
+    ])
+
+
 def has_protected_text(item: dict[str, Any]) -> bool:
-    combined = " ".join(
-        [
-            norm(get_category(item)),
-            norm(get_sender(item)),
-            norm(get_subject(item)),
-            norm(item.get("snippet")),
-            norm(item.get("reason")),
-        ]
-    )
+    combined = _protected_text_combined(item)
     return any(term in combined for term in PROTECTED_TEXT_TERMS)
+
+
+def find_protected_text_terms(item: dict[str, Any]) -> list[str]:
+    """Return every PROTECTED_TEXT_TERMS entry that matched this item (for logging/audit)."""
+    combined = _protected_text_combined(item)
+    return [t for t in PROTECTED_TEXT_TERMS if t in combined]
 
 
 def validate_gate(items: list[dict[str, Any]]) -> tuple[list[str], list[str]]:

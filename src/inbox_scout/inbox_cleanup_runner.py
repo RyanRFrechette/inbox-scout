@@ -11,6 +11,7 @@ from inbox_scout.trash_execution_runner import (
     TRASH_SAFE_CATEGORIES,
     MAX_TRASH_RISK,
     append_jsonl,
+    find_protected_text_terms,
     get_category,
     get_message_id,
     get_modify_service,
@@ -139,7 +140,9 @@ def validate_candidate(candidate: dict, items: list[dict[str, Any]]) -> tuple[bo
         return False, f"Queue item {queue_id} is already trashed."
 
     if has_protected_text(item):
-        return False, f"Queue item {queue_id} has protected text in sender/subject/snippet."
+        matched = find_protected_text_terms(item)
+        terms = ", ".join(matched[:3]) if matched else "unknown"
+        return False, f"Queue item {queue_id} has protected text in sender/subject/snippet: {terms}."
 
     return True, ""
 
