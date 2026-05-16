@@ -1,99 +1,420 @@
-﻿# Inbox Scout
+# Inbox Scout
 
-Inbox Scout is a local-first Gmail inbox cleanup assistant controlled via Telegram (bot: Atlas).
+**Inbox Scout** is a local-first AI Gmail cleanup assistant controlled through Telegram. The Telegram bot, **Atlas**, helps scan unread inbox messages, classify risk, move obvious low-risk junk to Gmail Trash, mark safely handled messages as read, and leave sensitive email untouched for manual review.
 
-## Current Status — Phase 13Z-C (Live MVP complete, 2026-05-14)
+This project was built as a real-world automation system, not a toy demo. It combines Gmail API access, AI-assisted classification, natural-language command routing, guarded Gmail actions, audit logging, and safety-first automation design.
 
-**Phase 13Z-C live test passed.** Full cleanup flow verified end-to-end through Telegram:
+> Portfolio focus: practical Python automation, API integration, AI-assisted workflow design, safety guardrails, local-first tooling, and operational thinking.
 
-- "clean my inbox" → 25-email read-only scan across 5 batches (cap enforced)
-- cleanup status → `stopped_by_cap`, scanned 25, batches 5, cap 25, progress 100%
-- cleanup plan → 17 protected, 0 needs review, 8 trash candidates
-- "move trash" → moved exactly those 8 candidates to Gmail Trash
-- nothing permanently deleted
+---
 
-**Key commits:**
-- `6e02ca1` fix: prevent duplicate telegram watchers
-- `c0cdf47` feat: harden cleanup test progress and watcher errors
-- `fc19dd5` docs: add token-efficient Claude workflow
+## Problem
 
-**Next:** portfolio/cloud deployment planning (Phase 14 — permanent delete — disabled until explicitly enabled).
+Email cleanup is repetitive, risky, and easy to get wrong. A normal inbox contains newsletters, promotions, shipping notices, receipts, bank alerts, login/security messages, medical messages, job emails, and personal messages all mixed together.
 
-## Safety Rules
+The goal of Inbox Scout is to reduce inbox noise without creating a dangerous automation that can accidentally delete or hide important email.
 
-- Read-only by default. No archiving, no permanent delete.
-- Gmail Trash via "move trash" only — requires prior cleanup plan (gated, two-step).
-- Protected/manual-review emails never touched by any automated action.
-- Permanent delete disabled at the code level (Phase 14, nuclear flag required).
-- Duplicate Telegram watcher prevention: self-protection lock enforced.
+Inbox Scout is designed around one core rule:
 
-## What it does
+**Automate the obvious. Protect the risky. Log everything.**
 
-1. Fetches unread Gmail inbox messages via Gmail API
-2. Classifies emails with local rules + AI (Ollama/qwen3:8b)
-3. Builds a local review queue with decisions (keep, archive, trash, ignore, protected)
-4. Applies Gmail Trash actions only after explicit two-step Telegram confirmation
-5. Sends status and accepts commands via Telegram (Atlas)
+---
 
-## Telegram commands (Atlas)
+## What Inbox Scout does
 
-| Command | Effect |
+Inbox Scout can:
+
+- Read unread Gmail inbox messages through the Gmail API.
+- Classify emails using local rules plus optional AI assistance.
+- Route AI calls between local Ollama and OpenRouter.
+- Accept natural-language Telegram commands through Atlas.
+- Build local review queues for safe triage.
+- Identify obvious low-risk newsletter/promotion-style emails.
+- Move only safe trash candidates to Gmail Trash, not permanent delete.
+- Mark successfully handled emails as read after the Gmail action succeeds.
+- Preserve sensitive emails for manual review.
+- Show audit output explaining what happened and why.
+
+Inbox Scout does **not** permanently delete email.
+
+---
+
+## Current project status
+
+**Status:** Active portfolio MVP with real Gmail integration and live safety testing.
+
+Implemented areas:
+
+- Gmail read-only and modify OAuth flows
+- Rule-based email classification
+- AI-assisted classification
+- OpenRouter model switching
+- Telegram bot control through Atlas
+- Natural-language cleanup commands
+- Safe Gmail Trash runner
+- Mark-as-read after successful safe action
+- Queue audit tooling
+- Protected-category safety system
+- InboxScout Gmail labels
+- Classification audit explanations
+- Cloud deployment planning for a background worker
+
+Current active direction:
+
+- Build a true Inbox Zero filing mode.
+- Make `sort all` and similar commands process the whole unread inbox through safe batch automation instead of old 5-email confirmation loops.
+- Safely label/archive selected low-risk historical categories while keeping finance, legal, medical, login/security, job, receipt, payment, account, and personal email protected.
+
+---
+
+## Architecture
+
+```text
+Telegram user command
+        |
+        v
+Atlas Telegram bot
+        |
+        v
+Natural-language intent router
+        |
+        v
+Gmail unread scan -> classifier -> local review queue
+        |                         |
+        |                         v
+        |                  rule + AI risk decision
+        |
+        v
+Safety gate / cleanup plan
+        |
+        v
+Allowed action only if low-risk and non-protected
+        |
+        +--> move to Gmail Trash
+        +--> mark read after successful action
+        +--> label/category audit
+        +--> leave protected emails untouched
+```
+
+---
+
+## Tech stack
+
+| Area | Tools |
 |---|---|
-| `clean my inbox` / `cleanup my inbox` | Read-only 25-email scan, builds cleanup plan |
-| `yes` | Confirms and runs the pending scan/action |
-| `move trash` | Moves safe trash candidates to Gmail Trash (requires plan) |
-| `cleanup status` | Shows current cleanup progress |
-| `cancel cleanup` | Cancels in-progress cleanup |
-| `sort all` | 5-email batch sort (read-only) |
-| `continue sorting` | Advance to next batch using saved cursor |
-| `queue` / `next` / `status` | Read-only info commands |
-| `ping` | Health check |
-| `block senders in trash` | Build a sender-block plan from trashed emails |
-| `BLOCK N TRASH SENDERS` | Exact confirmation phrase to execute the block |
+| Language | Python |
+| Email API | Gmail API / Google OAuth |
+| Chat control | Telegram Bot API |
+| Local AI | Ollama / qwen3:8b |
+| Cloud AI option | OpenRouter |
+| Data storage | Local JSON queues and JSONL audit logs |
+| CLI tooling | PowerShell shortcuts + Python module entrypoints |
+| Safety model | Rule gates, protected categories, risk thresholds, dry-run planners, final runners |
+| Deployment target | Local Windows environment first; cloud worker planned |
 
-## Cloud Deployment — Render Background Worker
+---
 
-GitHub repo: https://github.com/RyanRFrechette/inbox-scout
+## Key features
 
-### Build & start commands
+### 1. Telegram-controlled inbox assistant
 
-| | Command |
+Inbox Scout is controlled through a Telegram bot named Atlas. The goal is to let the user send commands like:
+
+```text
+clean 25 emails
+sort my inbox
+get me closer to inbox zero
+show queue
+/model status
+```
+
+Atlas translates natural language into safe workflow actions.
+
+---
+
+### 2. Local-first Gmail safety model
+
+The project separates planning from execution.
+
+A scan can classify emails and build a local queue without changing Gmail. Actions are handled by guarded runners that re-check safety before touching Gmail.
+
+Safety layers include:
+
+- Protected category checks
+- Protected keyword checks
+- Risk score thresholds
+- Manual-review preservation
+- Gmail action state tracking
+- Final runner validation
+- Audit logging
+- No permanent delete path enabled
+
+---
+
+### 3. Rule + AI classification
+
+Inbox Scout uses deterministic rules first, then AI when useful.
+
+The classification system can identify common categories such as:
+
+- Promotion
+- Newsletter
+- Shopping history
+- Receipts
+- Security
+- Finance
+- Accounts
+- Jobs
+- Manual review
+- Protected review
+
+AI output is not blindly trusted. If local rules mark something protected, the system preserves that safety decision even if the AI suggests a lower-risk category.
+
+---
+
+### 4. OpenRouter model switching
+
+Inbox Scout supports model routing between local and cloud AI providers.
+
+Supported modes include:
+
+```text
+/model status
+/model local
+/model openrouter
+/model auto
+```
+
+Auto mode is designed to keep costs low:
+
+- Obvious rule-based junk can skip AI.
+- Small scans can use local models.
+- Larger cleanup batches can use OpenRouter when configured.
+- Protected emails stay protected regardless of provider output.
+
+---
+
+### 5. Reversible cleanup actions
+
+Inbox Scout moves safe junk to **Gmail Trash**, not permanent delete.
+
+That distinction matters. Gmail Trash is reversible. Permanent deletion is intentionally disabled because inbox automation should fail safely.
+
+The cleanup runner only handles low-risk candidates such as obvious promotions or newsletters. Sensitive categories are skipped.
+
+---
+
+### 6. Mark-read only after successful handling
+
+Inbox Scout can mark an email as read only after the email was successfully handled by a safe Gmail action.
+
+That prevents important unread emails from being hidden just because the classifier saw them.
+
+---
+
+### 7. Audit-first development
+
+Inbox Scout includes audit tools so the system can explain what happened.
+
+The queue audit helper can show:
+
+- Email ID
+- Subject
+- Category
+- Risk score
+- Manual-review status
+- Local decision
+- Candidate bucket
+- Human-readable reason
+- Whether the final runner would block the item
+
+This makes the system easier to debug and safer to improve.
+
+---
+
+## Safety rules
+
+Inbox Scout is intentionally conservative.
+
+Protected or manual-review email categories include:
+
+- Finance and banking
+- Payments
+- Receipts and invoices
+- Shipping and order confirmations
+- Security and login alerts
+- Legal and tax
+- Medical and health
+- Job and career
+- Personal messages
+- Client or business communication
+- Warranty, support, refunds, and account access
+
+Automation rules:
+
+- No permanent delete.
+- No Gmail writes without a safe runner.
+- No protected/manual-review email is auto-trashed.
+- No protected/manual-review email is auto-marked-read.
+- No sender blocking unless explicitly approved in a separate safety flow.
+- Secrets, tokens, OAuth files, queues, logs, and runtime data are excluded from source control.
+
+---
+
+## Example workflow
+
+```text
+User sends Telegram command:
+clean 25 emails
+
+Atlas scans unread inbox messages.
+Inbox Scout classifies each message.
+Protected emails are locked for manual review.
+Obvious low-risk promotions/newsletters become trash candidates.
+The final safety runner checks each candidate again.
+Only safe candidates move to Gmail Trash.
+Successfully moved emails are marked read.
+Atlas summarizes what happened.
+```
+
+Example outcome:
+
+```text
+Scanned: 25
+Protected: 17
+Unclear: 0
+Trash candidates: 8
+Moved to Trash: only candidates that passed final safety checks
+Permanent deletes: 0
+```
+
+---
+
+## What I built
+
+This project includes multiple production-style components:
+
+- Gmail OAuth setup with separate read-only and modify tokens
+- Gmail inbox fetcher
+- Paginated Gmail scan support
+- Rule-based classifier
+- AI classifier integration
+- OpenRouter provider router
+- Local review queue system
+- Queue viewer and decision updater
+- Gmail label manager
+- Archive planner and guarded runner
+- Trash planner and guarded runner
+- Trash execution safety gate
+- Mark-read planner and guarded runner
+- Telegram notifier
+- Telegram listener
+- Natural-language intent router
+- Cleanup autopilot path
+- Model switching commands
+- Queue audit module
+- Protected text detection
+- Filing category labels
+- Project documentation and phase logs
+
+---
+
+## Skills demonstrated
+
+This project demonstrates practical ability in:
+
+- Python application design
+- API integration
+- OAuth-based authentication workflows
+- Gmail API automation
+- Telegram bot automation
+- AI-assisted classification
+- Prompt/routing strategy for local and cloud models
+- Safety-critical automation design
+- Test-driven feature hardening
+- JSON/JSONL local state management
+- CLI workflow design
+- Windows/PowerShell developer tooling
+- Git-based phased development
+- Operational debugging and audit logging
+
+---
+
+## Running locally
+
+> This project requires private Gmail and Telegram credentials. Secrets are not included in this repository.
+
+Install dependencies:
+
+```powershell
+pip install -r requirements.txt
+```
+
+Set module path:
+
+```powershell
+$env:PYTHONPATH = "src"
+```
+
+Run the Telegram watcher:
+
+```powershell
+python -m inbox_scout.telegram_watch
+```
+
+Run a read-only report scan:
+
+```powershell
+python -m inbox_scout.report_mode --limit 25 --page-size 5 --unread-only --export both
+```
+
+Run queue audit:
+
+```powershell
+python -m inbox_scout.queue_audit --plain
+```
+
+---
+
+## Environment variables
+
+Common local/cloud environment variables:
+
+| Variable | Purpose |
 |---|---|
-| Build | `pip install -r requirements.txt` |
-| Start | `python -m inbox_scout.telegram_watch` |
-| PYTHONPATH | `src` |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token for Atlas |
+| `TELEGRAM_CHAT_ID` | Authorized Telegram chat ID |
+| `OPENROUTER_API_KEY` | Optional cloud model provider key |
+| `PYTHONPATH` | Should include `src` |
 
-### Required secrets (set in Render dashboard — never commit)
+Credential files such as Gmail tokens and local `.env` files are intentionally ignored by git.
 
-| Env var | Description |
-|---|---|
-| `TELEGRAM_BOT_TOKEN` | Atlas bot token from @BotFather |
-| `TELEGRAM_CHAT_ID` | Your Telegram chat ID (numeric) |
-| `GMAIL_TOKEN_JSON` | base64-encoded `token.json` (Gmail OAuth refresh token) |
+---
 
-The code reads `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` from env vars first, falling back to local files for development.
+## Roadmap
 
-### Persistent disk
+Next milestones:
 
-Render's ephemeral filesystem loses `data/logs/` and `data/plans/` on every redeploy.
-Attach a **1 GB persistent disk** mounted at `/opt/render/project/src/data` (configured in `render.yaml`).
+- Complete Inbox Zero filing mode.
+- Make `sort all` process the full unread inbox through safe batching.
+- Add safe category filing for shopping history and other low-risk archival categories.
+- Improve cloud deployment as an always-on background worker.
+- Add a lightweight dashboard for portfolio/demo visibility.
+- Keep permanent delete disabled unless a future explicit nuclear confirmation flow is designed and reviewed.
 
-### Known limitations for cloud
+---
 
-| Limitation | Impact | Fix required |
-|---|---|---|
-| Gmail OAuth tokens can't be refreshed interactively | Must pre-provision `token.json` via a startup wrapper that decodes `GMAIL_TOKEN_JSON` | Startup entrypoint script |
-| Ollama (AI classifier) not available on Render | Classification falls back to rule-based only — no Gmail safety impact | Optional: swap to a cloud LLM |
-| `telegram_watch.py` stale-watcher cleanup uses PowerShell | Fails silently on Linux; watcher still starts | Port to `psutil` or `pkill` |
+## Why this matters
 
-### Deploy checklist (portfolio demo)
+Inbox Scout shows how AI automation can be useful without being reckless.
 
-- [ ] Push latest `master` to GitHub
-- [ ] Create Render Background Worker from repo
-- [ ] Set `PYTHONPATH=src` env var
-- [ ] Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` secrets
-- [ ] Encode `token.json` → base64 → set as `GMAIL_TOKEN_JSON`
-- [ ] Add startup wrapper to decode `GMAIL_TOKEN_JSON` to `data/token.json`
-- [ ] Attach 1 GB persistent disk at `/opt/render/project/src/data`
-- [ ] Deploy and send `ping` from Telegram — expect `pong`
-- [ ] Send `status` — expect inbox summary
+The project is intentionally built like a real operations tool:
+
+- It has safety gates.
+- It has audit logs.
+- It separates planning from execution.
+- It treats sensitive data carefully.
+- It uses AI where helpful, but not as the only source of truth.
+- It solves a real repetitive workflow with measurable value.
+
+For a hiring manager, this project demonstrates the ability to build practical automation systems that connect APIs, AI, user interfaces, and safety controls into a working product.
