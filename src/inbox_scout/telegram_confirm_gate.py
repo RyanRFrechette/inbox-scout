@@ -1,8 +1,6 @@
 ﻿from __future__ import annotations
 
-from inbox_scout.trash_execution_gate import build_trash_execution_gate_message
-
-from inbox_scout.archive_execution_gate import build_archive_execution_gate_message
+from __future__ import annotations
 
 import json
 import re
@@ -10,21 +8,27 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from inbox_scout.archive_execution_gate import build_archive_execution_gate_message
+from inbox_scout.inbox_cleanup_runner import attempt_mark_read_after_action
 from inbox_scout.telegram_approval import (
+    clean,
     evaluate_archive,
-    evaluate_trash,
     evaluate_markread,
+    evaluate_trash,
     find_item,
+    get_message_id,
     get_queue_id,
     get_risk,
-    clean,
 )
+from inbox_scout.trash_execution_gate import build_trash_execution_gate_message
+from inbox_scout.trash_execution_runner import get_modify_service
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = PROJECT_ROOT / "config" / "telegram_config.json"
 LOG_DIR = PROJECT_ROOT / "data" / "logs"
 CONFIRM_LOG = LOG_DIR / "telegram_confirm_gate_dryrun.jsonl"
+LATEST_QUEUE_PATH = PROJECT_ROOT / "data" / "review_queue" / "latest_queue.json"
 
 
 def now_iso() -> str:
@@ -82,6 +86,109 @@ def log_confirm_attempt(row: dict[str, Any]) -> None:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     with CONFIRM_LOG.open("a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def _reset_execution_flags() -> None:
+    config = load_config()
+    config["telegram_confirm_enabled"] = False
+    config["telegram_apply_enabled"] = False
+    save_config(config)
+
+
+def _load_full_queue() -> tuple[Any, list]:
+    data = json.loads(LATEST_QUEUE_PATH.read_text(encoding="utf-8-sig"))
+    if isinstance(data, list):
+        return data, data
+    return data, data.get("queue_items", [])
+
+
+def _save_full_queue(original: Any) -> None:
+    LATEST_QUEUE_PATH.write_text(
+        json.dumps(original, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
+
+def _execute_confirmed_action(action: str, queue_id: str, item: dict) -> str:
+    message_id = get_message_id(item)
+    if not message_id:
+        log_confirm_attempt({
+            "timestamp": now_iso(), "command": f"confirm {action} {queue_id}",
+            "action": action, "queue_id": queue_id, "message_id": None,
+            "status": "BLOCKED_NO_MESSAGE_ID", "gmail_changed": False,
+            "mark_read_success": False, "error": "Missing Gmail message ID",
+        })
+        return f"Blocked: missing Gmail message ID for ID {queue_id}.\n\nGmail not touched."
+
+    try:
+        service = get_modify_service()
+    except Exception as e:
+        log_confirm_attempt({
+            "timestamp": now_iso(), "command": f"confirm {action} {queue_id}",
+            "action": action, "queue_id": queue_id, "message_id": message_id,
+            "status": "SERVICE_ERROR", "gmail_changed": False,
+            "mark_read_success": False, "error": str(e),
+        })
+        return f"Could not connect to Gmail: {e}\n\nGmail not touched."
+
+    original, items = _load_full_queue()
+    live_item = next((i for i in items if get_queue_id(i) == queue_id), None)
+    if not live_item:
+        return f"Queue item {queue_id} not found at execution time. Gmail not touched."
+
+    action_taken = False
+    error_msg = None
+    action_time = now_iso()
+
+    try:
+        if action == "archive":
+            service.users().messages().modify(
+                userId="me", id=message_id, body={"removeLabelIds": ["INBOX"]}
+            ).execute()
+            live_item["gmail_archived"] = True
+            live_item["gmail_action_taken"] = True
+            live_item["gmail_action_type"] = "archived"
+            live_item["gmail_archived_at"] = action_time
+        elif action == "trash":
+            service.users().messages().trash(userId="me", id=message_id).execute()
+            live_item["gmail_trashed"] = True
+            live_item["gmail_action_taken"] = True
+            live_item["gmail_action_type"] = "trashed"
+            live_item["gmail_trashed_at"] = action_time
+        action_taken = True
+    except Exception as e:
+        error_msg = str(e)
+
+    mark_read_ok = False
+    if action_taken:
+        mark_read_ok = attempt_mark_read_after_action(service, message_id, live_item)
+        _save_full_queue(original)
+
+    log_confirm_attempt({
+        "timestamp": now_iso(),
+        "command": f"confirm {action} {queue_id}",
+        "action": action,
+        "queue_id": queue_id,
+        "message_id": message_id,
+        "status": "EXECUTED" if action_taken else "EXECUTION_FAILED",
+        "gmail_changed": action_taken,
+        "mark_read_success": mark_read_ok,
+        "error": error_msg,
+    })
+
+    if not action_taken:
+        return (
+            f"Gmail {action} failed for ID {queue_id}.\n\n"
+            f"Error: {error_msg}\n\n"
+            "Gmail not touched."
+        )
+
+    subject = clean(live_item.get("subject", "(no subject)"))[:55]
+    return (
+        f"Done. {action.capitalize()} executed for ID {queue_id}.\n\n"
+        f"Subject: {subject}\n"
+        f"Mark-read: {'yes' if mark_read_ok else 'no'}\n\n"
+        "Flags reset. Gmail updated."
+    )
 
 
 def evaluate_confirm_gate(command: str) -> str:
@@ -155,8 +262,10 @@ def evaluate_confirm_gate(command: str) -> str:
         status = "READY BUT APPLY DISABLED"
         final_reason = "Confirm is enabled, but Telegram Gmail apply mode is disabled in config."
     else:
-        status = "WOULD EXECUTE IN FUTURE"
-        final_reason = "Future execution path only. This module still does not execute Gmail changes."
+        try:
+            return _execute_confirmed_action(action, queue_id, item)
+        finally:
+            _reset_execution_flags()
 
     row = {
         "timestamp": now_iso(),
