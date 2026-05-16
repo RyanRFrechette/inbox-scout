@@ -209,7 +209,16 @@ def build_inbox_cleanup_runner_message() -> str:
             item["gmail_trash_review_folder"] = True
 
             trashed.append(queue_id)
-            attempt_mark_read_after_action(service, message_id, item)
+            mark_read_ok = attempt_mark_read_after_action(service, message_id, item)
+            append_jsonl(TRASH_EXECUTION_LOG, {
+                "event": "cleanup_mark_read",
+                "run_id": run_id,
+                "timestamp": now_iso(),
+                "queue_id": queue_id,
+                "message_id": message_id,
+                "gmail_changed": mark_read_ok,
+                "success": mark_read_ok,
+            })
 
             append_jsonl(TRASH_EXECUTION_LOG, {
                 "event": "cleanup_trash_moved",

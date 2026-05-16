@@ -170,5 +170,37 @@ class TestCleanupRunnerMarkRead(unittest.TestCase):
         self.assertFalse(item_not_in_plan.get("gmail_marked_read", False))
 
 
+class TestMarkReadLogging(unittest.TestCase):
+    def _run_with_log_capture(self, mock_svc, candidates, queue_items):
+        import inbox_scout.inbox_cleanup_runner as runner
+        from inbox_scout.inbox_cleanup_runner import build_inbox_cleanup_runner_message
+        log_entries: list[dict] = []
+        with patch.object(runner, "load_and_validate_cleanup_plan", return_value=(candidates, [])), \
+             patch.object(runner, "load_queue_document", return_value=(queue_items, queue_items)), \
+             patch.object(runner, "save_queue_document"), \
+             patch.object(runner, "append_jsonl", side_effect=lambda _path, entry: log_entries.append(entry)), \
+             patch.object(runner, "get_modify_service", return_value=mock_svc):
+            build_inbox_cleanup_runner_message()
+        return log_entries
+
+    def test_mark_read_success_logged(self):
+        mock_svc = MagicMock()
+        entries = self._run_with_log_capture(mock_svc, [_candidate()], [_safe_item()])
+        mark_read_entries = [e for e in entries if e.get("event") == "cleanup_mark_read"]
+        self.assertEqual(len(mark_read_entries), 1)
+        self.assertTrue(mark_read_entries[0]["success"])
+        self.assertTrue(mark_read_entries[0]["gmail_changed"])
+        self.assertEqual(mark_read_entries[0]["message_id"], "msg001")
+
+    def test_mark_read_failure_logged(self):
+        mock_svc = MagicMock()
+        mock_svc.users.return_value.messages.return_value.modify.return_value.execute.side_effect = RuntimeError("fail")
+        entries = self._run_with_log_capture(mock_svc, [_candidate()], [_safe_item()])
+        mark_read_entries = [e for e in entries if e.get("event") == "cleanup_mark_read"]
+        self.assertEqual(len(mark_read_entries), 1)
+        self.assertFalse(mark_read_entries[0]["success"])
+        self.assertFalse(mark_read_entries[0]["gmail_changed"])
+
+
 if __name__ == "__main__":
     unittest.main()
