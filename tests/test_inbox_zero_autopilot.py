@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import sys
 import unittest
+import unittest.mock
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -101,13 +102,13 @@ class TestInboxZeroRouting(unittest.TestCase):
 
 
 class TestInboxZeroCap(unittest.TestCase):
-    def test_autopilot_sort_all_max_greater_than_5(self):
-        from inbox_scout.autopilot_cleanup import AUTOPILOT_SORT_ALL_MAX
-        self.assertGreater(AUTOPILOT_SORT_ALL_MAX, 5)
+    def test_emergency_cap_greater_than_250(self):
+        from inbox_scout.autopilot_cleanup import AUTOPILOT_EMERGENCY_CAP
+        self.assertGreater(AUTOPILOT_EMERGENCY_CAP, 250)
 
-    def test_autopilot_sort_all_max_at_least_50(self):
-        from inbox_scout.autopilot_cleanup import AUTOPILOT_SORT_ALL_MAX
-        self.assertGreaterEqual(AUTOPILOT_SORT_ALL_MAX, 50)
+    def test_emergency_cap_at_least_1000(self):
+        from inbox_scout.autopilot_cleanup import AUTOPILOT_EMERGENCY_CAP
+        self.assertGreaterEqual(AUTOPILOT_EMERGENCY_CAP, 1000)
 
     def test_inbox_zero_phrases_contains_sort_all(self):
         from inbox_scout.natural_intent import _INBOX_ZERO_PHRASES
@@ -317,6 +318,116 @@ class TestProcessNonTrashItems(unittest.TestCase):
         self.assertEqual(result["errors"], 1)
         self.assertEqual(result["marked_read"], 0)
         svc.users().messages().modify.assert_not_called()
+
+
+class TestRunInboxZeroAutopilotFullInbox(unittest.TestCase):
+    """sort all must process the full inbox without artificial 250-email cap."""
+
+    def _base_patches(self, ac, n_batches: int, items_per_batch: int = 25):
+        """Return a dict of patch kwargs that simulate n_batches then empty."""
+        call_count = [0]
+
+        def fake_items():
+            call_count[0] += 1
+            if call_count[0] <= n_batches:
+                return [{"gmail_message_id": f"M{call_count[0]}_{i}", "category": "newsletter", "risk_score": 5}
+                        for i in range(items_per_batch)]
+            return []
+
+        mock_plan = MagicMock()
+        mock_plan.workflow_mode = "commands_planned"
+        mock_plan.requested_limit = 25
+
+        mock_cleanup = MagicMock()
+        mock_cleanup.trash_candidate_count = 0
+
+        return dict(
+            _get_modify_service_for_autopilot=MagicMock(return_value=MagicMock()),
+            _get_unread_inbox_count=MagicMock(return_value=n_batches * items_per_batch),
+            build_scan_queue_plan=MagicMock(return_value=mock_plan),
+            save_plan=MagicMock(),
+            _run_scan=MagicMock(return_value=MagicMock(returncode=0)),
+            _load_json=MagicMock(return_value={"status": "complete"}),
+            _load_items_from_queue=MagicMock(side_effect=fake_items),
+            build_inbox_cleanup_plan=MagicMock(return_value=mock_cleanup),
+            _process_non_trash_items=MagicMock(return_value={
+                "labeled": items_per_batch, "archived": 0,
+                "marked_read": items_per_batch, "protected": 0, "errors": 0,
+            }),
+            _beep_once=MagicMock(),
+        )
+
+    def test_sort_all_shows_starting_unread_count(self):
+        from inbox_scout import autopilot_cleanup as ac
+        patches = self._base_patches(ac, n_batches=1, items_per_batch=25)
+        patches["_get_unread_inbox_count"] = MagicMock(return_value=42)
+        with unittest.mock.patch.multiple("inbox_scout.autopilot_cleanup", **patches):
+            result = ac.run_inbox_zero_autopilot("sort all")
+        self.assertIn("Starting unread: 42", result)
+
+    def test_sort_all_can_exceed_250(self):
+        from inbox_scout import autopilot_cleanup as ac
+        patches = self._base_patches(ac, n_batches=11, items_per_batch=25)  # 275 total
+        with unittest.mock.patch.multiple("inbox_scout.autopilot_cleanup", **patches):
+            result = ac.run_inbox_zero_autopilot("sort all")
+        self.assertIn("Scanned: 275", result)
+
+    def test_no_safety_cap_250_in_normal_completion(self):
+        from inbox_scout import autopilot_cleanup as ac
+        patches = self._base_patches(ac, n_batches=2)
+        with unittest.mock.patch.multiple("inbox_scout.autopilot_cleanup", **patches):
+            result = ac.run_inbox_zero_autopilot("sort all")
+        self.assertNotIn("Safety cap", result)
+        self.assertNotIn("Run again to continue", result)
+
+    def test_loops_multiple_batches_without_confirmation(self):
+        from inbox_scout import autopilot_cleanup as ac
+        scan_calls = [0]
+
+        original_patches = self._base_patches(ac, n_batches=3)
+
+        def count_scan():
+            scan_calls[0] += 1
+            return MagicMock(returncode=0)
+
+        original_patches["_run_scan"] = MagicMock(side_effect=count_scan)
+        with unittest.mock.patch.multiple("inbox_scout.autopilot_cleanup", **original_patches):
+            ac.run_inbox_zero_autopilot("sort all")
+        self.assertGreaterEqual(scan_calls[0], 3)
+
+    def test_stops_when_unread_zero(self):
+        from inbox_scout import autopilot_cleanup as ac
+        mock_plan = MagicMock()
+        mock_plan.workflow_mode = "commands_planned"
+        mock_plan.requested_limit = 25
+        with unittest.mock.patch.multiple("inbox_scout.autopilot_cleanup",
+                _get_modify_service_for_autopilot=MagicMock(return_value=MagicMock()),
+                _get_unread_inbox_count=MagicMock(return_value=0),
+                build_scan_queue_plan=MagicMock(return_value=mock_plan),
+                save_plan=MagicMock(),
+                _run_scan=MagicMock(return_value=MagicMock(returncode=0)),
+                _load_json=MagicMock(return_value={"status": "complete"}),
+                _load_items_from_queue=MagicMock(return_value=[]),
+                _beep_once=MagicMock()):
+            result = ac.run_inbox_zero_autopilot("sort all")
+        self.assertIn("Scanned: 0", result)
+        self.assertIn("Nothing permanently deleted", result)
+
+    def test_emergency_cap_not_hit_for_2000_inbox(self):
+        from inbox_scout import autopilot_cleanup as ac
+        patches = self._base_patches(ac, n_batches=80, items_per_batch=25)  # 2000 total
+        with unittest.mock.patch.multiple("inbox_scout.autopilot_cleanup", **patches):
+            result = ac.run_inbox_zero_autopilot("sort all")
+        self.assertIn("Scanned: 2000", result)
+        self.assertNotIn("Emergency runaway cap", result)
+        self.assertNotIn("Run again", result)
+
+    def test_complete_message_on_normal_finish(self):
+        from inbox_scout import autopilot_cleanup as ac
+        patches = self._base_patches(ac, n_batches=2)
+        with unittest.mock.patch.multiple("inbox_scout.autopilot_cleanup", **patches):
+            result = ac.run_inbox_zero_autopilot("sort all")
+        self.assertIn("Inbox Zero complete.", result)
 
 
 class TestParseTrashedCount(unittest.TestCase):

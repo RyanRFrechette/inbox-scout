@@ -21,7 +21,7 @@ AUTOPILOT_MAX_LIMIT = 25
 AUTOPILOT_DEFAULT_LIMIT = 25
 
 # Full inbox-zero autopilot constants
-AUTOPILOT_SORT_ALL_MAX = 250
+AUTOPILOT_EMERGENCY_CAP = 5000  # Runaway protection only — not a product limit
 QUEUE_PATH = PROJECT_ROOT / "data" / "review_queue" / "latest_queue.json"
 
 CATEGORY_TO_LABEL: dict[str, str] = {
@@ -300,6 +300,14 @@ def _process_non_trash_items(service: Any, items: list[dict], label_cache: dict)
     }
 
 
+def _get_unread_inbox_count(service: Any) -> int:
+    try:
+        result = service.users().labels().get(userId="me", id="INBOX").execute()
+        return int(result.get("messagesUnread", 0))
+    except Exception:
+        return 0
+
+
 def _get_modify_service_for_autopilot() -> Any:
     from inbox_scout.gmail_auth import get_gmail_service
     try:
@@ -309,17 +317,18 @@ def _get_modify_service_for_autopilot() -> Any:
 
 
 def run_inbox_zero_autopilot(text: str) -> str:
-    """Batch scan → trash safe + label + mark-read loop, capped at AUTOPILOT_SORT_ALL_MAX."""
-    cap = AUTOPILOT_SORT_ALL_MAX
-
+    """Process all unread INBOX emails: trash safe + label + mark-read until inbox is empty."""
     total_scanned = total_trashed = total_labeled = total_archived = 0
     total_marked_read = total_protected = total_errors = 0
+    stopped_early = False
 
     try:
         service = _get_modify_service_for_autopilot()
     except Exception as e:
         _beep_once()
         return f"Could not connect to Gmail.\n\n{e}\n\nGmail not touched."
+
+    initial_unread = _get_unread_inbox_count(service)
 
     label_cache: dict = {}
     cursor_path = PLANS_DIR / "latest_gmail_scan_cursor.json"
@@ -328,35 +337,35 @@ def run_inbox_zero_autopilot(text: str) -> str:
     if cursor_path.exists():
         cursor_path.unlink()
 
-    while total_scanned < cap:
-        remaining = cap - total_scanned
-        batch_limit = min(AUTOPILOT_MAX_LIMIT, remaining)
-
+    # Loop until inbox is empty (scan returns 0) or emergency runaway cap is hit.
+    while total_scanned < AUTOPILOT_EMERGENCY_CAP:
         # Never use continuation — always scan page 1 so that emails removed
         # from INBOX/UNREAD by prior actions don't cause stale page-token skips.
-        plan = build_scan_queue_plan(f"sort {batch_limit} emails")
+        plan = build_scan_queue_plan(f"sort {AUTOPILOT_MAX_LIMIT} emails")
         if plan.workflow_mode != "commands_planned":
+            stopped_early = True
             break
-        plan.requested_limit = min(plan.requested_limit or batch_limit, AUTOPILOT_MAX_LIMIT)
+        plan.requested_limit = min(plan.requested_limit or AUTOPILOT_MAX_LIMIT, AUTOPILOT_MAX_LIMIT)
         save_plan(plan)
 
         try:
             scan_result = _run_scan()
         except subprocess.TimeoutExpired:
             total_errors += 1
+            stopped_early = True
             break
 
         run_data = _load_json(LATEST_SCAN_QUEUE_RUN)
         if scan_result.returncode != 0 or run_data.get("status") != "complete":
             total_errors += 1
+            stopped_early = True
             break
 
         items = _load_items_from_queue()
         if not items:
             break  # Inbox fully processed.
 
-        batch_count = len(items)
-        total_scanned += batch_count
+        total_scanned += len(items)
 
         # Trash safe candidates; count only actual successes.
         cleanup_plan = build_inbox_cleanup_plan()
@@ -375,10 +384,13 @@ def run_inbox_zero_autopilot(text: str) -> str:
         total_protected += result_data["protected"]
         total_errors += result_data["errors"]
 
-    cap_reached = total_scanned >= cap
+    emergency_cap_hit = total_scanned >= AUTOPILOT_EMERGENCY_CAP
+    complete = not stopped_early and not emergency_cap_hit
+
     lines = [
-        "Inbox Zero complete.",
+        "Inbox Zero complete." if complete else "Inbox Zero stopped.",
         "",
+        f"Starting unread: {initial_unread}",
         f"Scanned: {total_scanned}",
         f"Moved to Trash: {total_trashed}",
         f"Labeled (InboxScout): {total_labeled}",
@@ -387,9 +399,11 @@ def run_inbox_zero_autopilot(text: str) -> str:
         f"Left in inbox (labeled, protected): {total_protected}",
     ]
     if total_errors:
-        lines.append(f"Errors: {total_errors}")
-    if cap_reached:
-        lines.extend(["", f"Safety cap: {cap} emails. Run again to continue."])
+        lines.append(f"Errors/skipped: {total_errors}")
+    if stopped_early and not emergency_cap_hit:
+        lines.append("Stopped due to error — run sort all again to continue.")
+    if emergency_cap_hit:
+        lines.extend(["", f"Emergency runaway cap hit ({AUTOPILOT_EMERGENCY_CAP}). Run sort all again."])
     lines.extend(["", "Nothing permanently deleted. All recoverable from Trash or Gmail."])
     _beep_once()
     return "\n".join(lines)
