@@ -24,6 +24,7 @@ from inbox_scout.trash_sender_block_plan import build_sender_block_plan_message
 from inbox_scout.trash_sender_block_runner import build_sender_block_runner_message
 from inbox_scout.model_router import get_provider, set_provider, model_status_message, get_active_provider, OLLAMA_MODEL, OPENROUTER_MODEL
 from inbox_scout.mark_read_runner import build_mark_read_plan_message, build_mark_read_runner_message
+from inbox_scout.queue_decision import build_set_decision_message
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -239,6 +240,10 @@ def handle_natural_message(text: str) -> str:
     model_response = _handle_model_command(msg)
     if model_response is not None:
         return model_response
+
+    decision_response = build_set_decision_message(msg)
+    if decision_response is not None:
+        return decision_response
 
     # Cleanup control commands must run before generic "status" matching.
     if any(phrase in msg for phrase in [
