@@ -1,4 +1,4 @@
-# Inbox Scout — AI Gmail Cleanup Assistant with Telegram Control
+# AI Gmail Cleanup Assistant — Inbox Scout with Telegram Control
 
 **Inbox Scout** is a local-first AI Gmail cleanup assistant controlled through Telegram. The Telegram bot, **Atlas**, helps scan unread inbox messages, classify risk, move obvious low-risk junk to Gmail Trash, mark safely handled messages as read, and leave sensitive email untouched for manual review.
 
