@@ -97,7 +97,7 @@ class TestAutopilotOrchestration(unittest.TestCase):
         self.assertIn("10", result)
         self.assertIn("3 protected", result)
         self.assertIn("2 unclear", result)
-        self.assertIn("5 safe to trash", result)
+        self.assertIn("5 trash candidates", result)
 
     def test_zero_candidates_blocks_runner(self):
         result, order = _run(candidates=0)
@@ -125,6 +125,15 @@ class TestAutopilotOrchestration(unittest.TestCase):
         # Verifies the runner used is the existing safety gate, not a bypass
         _, order = _run()
         self.assertIn("runner", order)
+
+    def test_cap_notice_shown_when_over_limit(self):
+        result, _ = _run(text="clean 50 emails")
+        self.assertIn("capped at 25", result)
+        self.assertIn("50", result)
+
+    def test_no_cap_notice_at_or_under_limit(self):
+        result, _ = _run(text="clean 25 emails")
+        self.assertNotIn("capped", result)
 
     def test_limit_parse_with_number(self):
         from inbox_scout.autopilot_cleanup import _parse_limit

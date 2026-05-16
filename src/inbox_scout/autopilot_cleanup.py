@@ -49,7 +49,10 @@ def _run_scan() -> subprocess.CompletedProcess[str]:
 
 
 def run_autopilot_cleanup(text: str) -> str:
-    limit = _parse_limit(text)
+    m = re.search(r"\b(\d+)\b", text.lower())
+    raw_limit = int(m.group(1)) if m else AUTOPILOT_DEFAULT_LIMIT
+    limit = min(max(raw_limit, 1), AUTOPILOT_MAX_LIMIT)
+    capped = raw_limit > AUTOPILOT_MAX_LIMIT
 
     # Build a plain scan plan using the capped limit.
     # We use "sort N emails" as the canonical plan text so the plan builder
@@ -81,9 +84,10 @@ def run_autopilot_cleanup(text: str) -> str:
     if scanned == 0:
         return "No emails scanned. Gmail not touched."
 
+    cap_note = f"(Scan capped at {AUTOPILOT_MAX_LIMIT} — you requested {raw_limit}.)\n" if capped else ""
     header = (
-        f"Scanned {scanned} — {protected} protected, "
-        f"{needs_review} unclear, {candidates} safe to trash."
+        f"{cap_note}Scanned {scanned} — {protected} protected, "
+        f"{needs_review} unclear, {candidates} trash candidates."
     )
 
     if candidates == 0:
