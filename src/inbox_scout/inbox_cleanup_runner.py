@@ -158,7 +158,7 @@ def build_inbox_cleanup_runner_message() -> str:
     original_queue, items = load_queue_document()
 
     valid_pairs: list[tuple[dict, dict]] = []
-    blocked: list[str] = []
+    skipped: list[tuple[str, str]] = []  # (queue_id, reason)
 
     for candidate in candidates:
         queue_id = str(candidate.get("queue_id", ""))
@@ -167,15 +167,26 @@ def build_inbox_cleanup_runner_message() -> str:
         if ok and item:
             valid_pairs.append((candidate, item))
         else:
-            blocked.append(reason)
+            skipped.append((queue_id, reason))
 
     if not valid_pairs:
         lines = ["No candidates passed safety validation.\n"]
-        lines.extend(f"- {r}" for r in blocked)
+        lines.extend(f"- {r}" for _, r in skipped)
         lines.append("\nGmail not touched.")
         return "\n".join(lines)
 
     run_id = make_run_id()
+
+    for skip_id, skip_reason in skipped:
+        append_jsonl(TRASH_EXECUTION_LOG, {
+            "event": "cleanup_trash_skipped",
+            "run_id": run_id,
+            "timestamp": now_iso(),
+            "queue_id": skip_id,
+            "reason": skip_reason,
+            "gmail_changed": False,
+        })
+
     append_jsonl(TRASH_EXECUTION_LOG, {
         "event": "cleanup_trash_apply_start",
         "run_id": run_id,
@@ -262,6 +273,10 @@ def build_inbox_cleanup_runner_message() -> str:
     if errors:
         lines.extend(["", "Warnings:"])
         lines.extend(f"- {e}" for e in errors)
+
+    if skipped:
+        lines.extend(["", "Skipped (failed safety check):"])
+        lines.extend(f"- ID {sid}: {sreason}" for sid, sreason in skipped)
 
     lines.extend([
         "",
