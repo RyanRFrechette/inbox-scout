@@ -53,7 +53,8 @@ MARKETING_TERMS = {
 
 PROTECTED_DANGER_TERMS = {
     "payment", "receipt", "invoice", "bill", "statement", "order confirmation",
-    "shipped", "delivered", "tracking", "password", "login", "security alert",
+    "shipped", "delivered", "package tracking", "order tracking", "tracking number",
+    "shipment tracking", "password", "login", "security alert",
     "security", "recovery email updated", "verification code", "account access",
     "legal", "medical", "job application", "job offer", "offer letter",
     "offer extended", "recruiter", "hiring", "candidate", "application status",
