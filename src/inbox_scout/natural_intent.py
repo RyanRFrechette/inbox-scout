@@ -25,6 +25,7 @@ from inbox_scout.trash_sender_block_runner import build_sender_block_runner_mess
 from inbox_scout.model_router import get_provider, set_provider, model_status_message, get_active_provider, OLLAMA_MODEL, OPENROUTER_MODEL
 from inbox_scout.mark_read_runner import build_mark_read_plan_message, build_mark_read_runner_message
 from inbox_scout.queue_decision import build_set_decision_message
+from inbox_scout.autopilot_cleanup import run_autopilot_cleanup
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -234,6 +235,23 @@ def _handle_model_command(msg: str) -> str | None:
     return f"Unknown model command: {subcmd}\n\nTry: /model status | /model local | /model openrouter | /model auto"
 
 
+_AUTOPILOT_PHRASES = [
+    "get me closer to inbox zero",
+    "handle a batch",
+    "clean the next",
+    "clean up my inbox",
+    "clean my inbox",
+    "cleanup my inbox",
+    "clean inbox",
+]
+
+
+def _is_autopilot_cleanup(msg: str) -> bool:
+    if any(phrase in msg for phrase in _AUTOPILOT_PHRASES):
+        return True
+    return bool(re.search(r"\b(sort|clean)\s+\d+\b", msg))
+
+
 def handle_natural_message(text: str) -> str:
     msg = text.lower().strip()
 
@@ -408,6 +426,16 @@ def handle_natural_message(text: str) -> str:
     ]):
         return sort_plan_message("sort all", continuation=True)
 
+    if any(phrase in msg for phrase in [
+        "cleanup test 25",
+        "clean my inbox test 25",
+        "test cleanup 25",
+    ]):
+        return sort_plan_message(text, cleanup=True)
+
+    if _is_autopilot_cleanup(msg):
+        return run_autopilot_cleanup(text)
+
     if any(phrase in msg for phrase in ["next", "next review", "needs review", "what needs my attention"]):
         return next_review_item()
 
@@ -424,13 +452,6 @@ def handle_natural_message(text: str) -> str:
         "pause cleanup",
     ]):
         return build_cancel_cleanup_message()
-
-    if any(phrase in msg for phrase in [
-        "cleanup test 25",
-        "clean my inbox test 25",
-        "test cleanup 25",
-    ]):
-        return sort_plan_message(text, cleanup=True)
 
     if any(phrase in msg for phrase in [
         "clean my inbox",
