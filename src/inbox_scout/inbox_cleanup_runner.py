@@ -132,6 +132,23 @@ def validate_candidate(candidate: dict, items: list[dict[str, Any]]) -> tuple[bo
     return True, ""
 
 
+def attempt_mark_read_after_action(service: Any, message_id: str, item: dict[str, Any]) -> bool:
+    """Mark email as read after a successful approved Gmail action. Non-critical: swallows errors."""
+    try:
+        service.users().messages().modify(
+            userId="me",
+            id=message_id,
+            body={"removeLabelIds": ["UNREAD"]},
+        ).execute()
+        item["gmail_marked_read"] = True
+        item["gmail_marked_read_at"] = now_iso()
+        item["gmail_read_action_type"] = "marked_read_after_trash"
+        item["gmail_read_action_taken"] = True
+        return True
+    except Exception:
+        return False
+
+
 def build_inbox_cleanup_runner_message() -> str:
     candidates, plan_errors = load_and_validate_cleanup_plan()
 
@@ -192,6 +209,7 @@ def build_inbox_cleanup_runner_message() -> str:
             item["gmail_trash_review_folder"] = True
 
             trashed.append(queue_id)
+            attempt_mark_read_after_action(service, message_id, item)
 
             append_jsonl(TRASH_EXECUTION_LOG, {
                 "event": "cleanup_trash_moved",
