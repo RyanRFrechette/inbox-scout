@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,6 +34,50 @@ TRASH_SAFE_CATEGORIES = {
 
 
 MAX_TRASH_RISK = 30
+
+
+# Categories where obvious marketing junk can still become a trash candidate.
+# AI often mislabels promotional clickbait as Personal, and shipping/order
+# confirmations as Archive candidate — so we rescue only when a strong
+# marketing signal exists AND no protected danger signal exists.
+MARKETING_RESCUE_CATEGORIES = {"personal", "archive candidate"}
+
+
+MARKETING_TERMS = {
+    "sale", "promo", "promotion", "discount", "coupon", "cart", "shopping cart",
+    "still looking", "we miss you", "new arrivals", "summer looks", "daily digest",
+    "tips", "newsletter", "unsubscribe", "limited time", "deal", "offer", "shop now",
+}
+
+
+PROTECTED_DANGER_TERMS = {
+    "payment", "receipt", "invoice", "bill", "statement", "order confirmation",
+    "shipped", "delivered", "tracking", "password", "login", "security alert",
+    "recovery email updated", "verification code", "account access", "legal",
+    "medical", "job application", "interview", "tax", "bank", "paypal", "cash app",
+}
+
+
+def _signal_text(item: dict[str, Any]) -> str:
+    parts = [
+        clean(item.get("from")),
+        clean(item.get("sender")),
+        clean(item.get("subject")),
+        clean(item.get("snippet")),
+    ]
+    return " ".join(p for p in parts if p).lower()
+
+
+def _matches_any_term(text: str, terms: set[str]) -> bool:
+    return any(re.search(r"\b" + re.escape(term) + r"\b", text) for term in terms)
+
+
+def has_obvious_marketing_signal(item: dict[str, Any]) -> bool:
+    return _matches_any_term(_signal_text(item), MARKETING_TERMS)
+
+
+def has_protected_danger_signal(item: dict[str, Any]) -> bool:
+    return _matches_any_term(_signal_text(item), PROTECTED_DANGER_TERMS)
 
 
 @dataclass
@@ -138,16 +183,24 @@ def is_safe_trash_candidate(item: dict[str, Any]) -> tuple[bool, str]:
     if is_protected_item(item):
         return False, "Protected/manual-review/high-risk item."
 
-    if category not in TRASH_SAFE_CATEGORIES:
-        return False, "Only newsletter/promotion clutter can be planned for Trash right now."
-
     if risk > MAX_TRASH_RISK:
         return False, f"Risk score {risk} is above safe Trash threshold {MAX_TRASH_RISK}."
 
     if decision not in {"pending_review", "possible_archive_later", "possible_trash_later"}:
         return False, "Local decision is not eligible for Trash planning."
 
-    return True, "Low-risk clutter. Safe Trash-review candidate after approval."
+    if has_protected_danger_signal(item):
+        return False, "Protected danger signal in sender/subject/snippet."
+
+    if category in TRASH_SAFE_CATEGORIES:
+        return True, "Low-risk newsletter/promotion clutter. Safe Trash-review candidate after approval."
+
+    if category in MARKETING_RESCUE_CATEGORIES:
+        if has_obvious_marketing_signal(item):
+            return True, "Obvious marketing signal in Personal/Archive-candidate. Safe Trash-review candidate after approval."
+        return False, "Personal/Archive-candidate has no obvious marketing signal."
+
+    return False, "Category is not eligible for Trash planning."
 
 
 def build_trash_plan() -> TrashPlan:

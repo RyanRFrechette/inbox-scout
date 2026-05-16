@@ -23,6 +23,11 @@ from inbox_scout.trash_execution_runner import (
     norm,
     save_queue_document,
 )
+from inbox_scout.trash_candidate_plan import (
+    MARKETING_RESCUE_CATEGORIES,
+    has_obvious_marketing_signal,
+    has_protected_danger_signal,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -111,7 +116,14 @@ def validate_candidate(candidate: dict, items: list[dict[str, Any]]) -> tuple[bo
     if category in PROTECTED_CATEGORIES:
         return False, f"Queue item {queue_id} has protected category: {get_category(item)}."
 
-    if category not in TRASH_SAFE_CATEGORIES:
+    if category in TRASH_SAFE_CATEGORIES:
+        pass
+    elif category in MARKETING_RESCUE_CATEGORIES:
+        if has_protected_danger_signal(item):
+            return False, f"Queue item {queue_id} has protected danger signal."
+        if not has_obvious_marketing_signal(item):
+            return False, f"Queue item {queue_id} has no obvious marketing signal."
+    else:
         return False, f"Queue item {queue_id} category is not Trash-safe: {get_category(item)}."
 
     if get_risk(item) > MAX_TRASH_RISK:
