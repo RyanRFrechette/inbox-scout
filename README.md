@@ -1,5 +1,9 @@
 # AI Gmail Cleanup Assistant — Inbox Scout with Telegram Control
 
+## Recruiter TL;DR
+
+Inbox Scout is a Python automation project that connects Gmail, Telegram, and AI classification into a safety-first email cleanup assistant. It demonstrates API integration, OAuth workflows, local/cloud model routing, audit logging, and guarded automation that moves only low-risk junk to Gmail Trash while protecting sensitive email. Relevant to technical support, cloud support, automation, and junior systems roles.
+
 **Inbox Scout** is a local-first AI Gmail cleanup assistant controlled through Telegram. The Telegram bot, **Atlas**, helps scan unread inbox messages, classify risk, move obvious low-risk junk to Gmail Trash, mark safely handled messages as read, and leave sensitive email untouched for manual review.
 
 This project was built as a real-world automation system, not a toy demo. It combines Gmail API access, AI-assisted classification, natural-language command routing, guarded Gmail actions, audit logging, and safety-first automation design.
