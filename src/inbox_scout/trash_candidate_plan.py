@@ -46,16 +46,22 @@ MARKETING_RESCUE_CATEGORIES = {"personal", "archive candidate"}
 MARKETING_TERMS = {
     "sale", "promo", "promotion", "discount", "coupon", "cart", "shopping cart",
     "still looking", "we miss you", "new arrivals", "summer looks", "daily digest",
-    "tips", "newsletter", "unsubscribe", "limited time", "deal", "offer", "shop now",
+    "tips", "newsletter", "unsubscribe", "limited time", "deal", "deals", "offer",
+    "shop now", "no-reply", "noreply",
 }
 
 
 PROTECTED_DANGER_TERMS = {
     "payment", "receipt", "invoice", "bill", "statement", "order confirmation",
     "shipped", "delivered", "tracking", "password", "login", "security alert",
-    "recovery email updated", "verification code", "account access", "legal",
-    "medical", "job application", "interview", "tax", "bank", "paypal", "cash app",
+    "security", "recovery email updated", "verification code", "account access",
+    "legal", "medical", "job application", "application", "offer letter",
+    "interview", "tax", "bank", "paypal", "cash app",
 }
+
+# Job/career and Client/business can be AI false positives for marketing emails.
+# These are the only categories eligible for marketing demotion.
+_DEMOTABLE_PROTECTED_CATEGORIES = frozenset({"job/career", "client/business"})
 
 
 def _signal_text(item: dict[str, Any]) -> str:
@@ -78,6 +84,17 @@ def has_obvious_marketing_signal(item: dict[str, Any]) -> bool:
 
 def has_protected_danger_signal(item: dict[str, Any]) -> bool:
     return _matches_any_term(_signal_text(item), PROTECTED_DANGER_TERMS)
+
+
+def is_marketing_false_positive_protected(item: dict[str, Any]) -> bool:
+    """True if a Job/career or Client/business label looks like an AI misclassification
+    of a marketing email. Used by the AI classifier to correct future scans."""
+    category = clean(item.get("category")).lower()
+    if category not in _DEMOTABLE_PROTECTED_CATEGORIES:
+        return False
+    if has_protected_danger_signal(item):
+        return False
+    return has_obvious_marketing_signal(item)
 
 
 @dataclass

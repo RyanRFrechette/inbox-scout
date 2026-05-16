@@ -8,6 +8,11 @@ from inbox_scout.rule_classifier import classify_email, load_json, load_lines
 from inbox_scout.inbox_fetcher import fetch_inbox_emails
 from inbox_scout.paths import HISTORY_DIR, PROTECTED_SENDERS_FILE, PROTECTED_TERMS_FILE, RULES_FILE
 from inbox_scout.model_router import classify_with_provider
+from inbox_scout.trash_candidate_plan import (
+    has_obvious_marketing_signal,
+    has_protected_danger_signal,
+    _DEMOTABLE_PROTECTED_CATEGORIES,
+)
 
 console = Console()
 
@@ -55,6 +60,34 @@ _ALWAYS_PROTECTED_RULE_CATEGORIES = frozenset({
 })
 
 
+def _demote_marketing_false_positive(email: dict, result: dict) -> dict:
+    """Demote Job/career or Client/business to Promotion when strong marketing signal
+    exists and no protected danger signal exists. Corrects AI/rule over-classification
+    of product newsletters and deal emails."""
+    original_category = (result.get("category") or "").lower().strip()
+    if original_category not in _DEMOTABLE_PROTECTED_CATEGORIES:
+        return result
+    signal_item = {
+        "from": email.get("from", ""),
+        "subject": email.get("subject", ""),
+        "snippet": email.get("snippet", ""),
+    }
+    if has_protected_danger_signal(signal_item):
+        return result
+    if not has_obvious_marketing_signal(signal_item):
+        return result
+    result = dict(result)
+    result["category"] = "Promotion"
+    result["manual_review"] = False
+    result["risk_score"] = 15
+    result["reason"] = (
+        f"Marketing signal detected — demoted from {original_category}. "
+        + str(result.get("reason", ""))
+    )
+    result["suggested_action"] = "Low-risk marketing email. Safe to archive or trash."
+    return result
+
+
 def classify_with_ai(email, rule_result, batch_size: int = 1):
     validated = classify_with_provider(email, rule_result, batch_size=batch_size)
 
@@ -67,6 +100,7 @@ def classify_with_ai(email, rule_result, batch_size: int = 1):
             validated["suggested_action"] = "Review manually before taking action."
             validated["reason"] = "Protected rule category preserved. " + str(validated.get("reason", ""))
 
+    validated = _demote_marketing_false_positive(email, validated)
     return validated
 
 
