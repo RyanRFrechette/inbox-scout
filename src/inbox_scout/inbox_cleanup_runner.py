@@ -18,7 +18,6 @@ from inbox_scout.trash_execution_runner import (
     get_queue_id,
     get_risk,
     get_subject,
-    has_protected_text,
     is_true,
     load_queue_document,
     norm,
@@ -139,9 +138,9 @@ def validate_candidate(candidate: dict, items: list[dict[str, Any]]) -> tuple[bo
     if is_true(item.get("gmail_trashed")):
         return False, f"Queue item {queue_id} is already trashed."
 
-    if has_protected_text(item):
-        matched = find_protected_text_terms(item)
-        terms = ", ".join(matched[:3]) if matched else "unknown"
+    matched = find_protected_text_terms(item)
+    if matched:
+        terms = ", ".join(matched[:3])
         return False, f"Queue item {queue_id} has protected text in sender/subject/snippet: {terms}."
 
     return True, ""

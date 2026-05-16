@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import re
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -221,15 +222,18 @@ def _protected_text_combined(item: dict[str, Any]) -> str:
     ])
 
 
-def has_protected_text(item: dict[str, Any]) -> bool:
-    combined = _protected_text_combined(item)
-    return any(term in combined for term in PROTECTED_TEXT_TERMS)
-
-
 def find_protected_text_terms(item: dict[str, Any]) -> list[str]:
-    """Return every PROTECTED_TEXT_TERMS entry that matched this item (for logging/audit)."""
+    """Return every PROTECTED_TEXT_TERMS entry that matched this item (for logging/audit).
+
+    Uses word-boundary matching so short terms like 'irs' don't false-positive
+    on substrings like 'first'.
+    """
     combined = _protected_text_combined(item)
-    return [t for t in PROTECTED_TEXT_TERMS if t in combined]
+    return [t for t in PROTECTED_TEXT_TERMS if re.search(r"\b" + re.escape(t) + r"\b", combined)]
+
+
+def has_protected_text(item: dict[str, Any]) -> bool:
+    return bool(find_protected_text_terms(item))
 
 
 def validate_gate(items: list[dict[str, Any]]) -> tuple[list[str], list[str]]:

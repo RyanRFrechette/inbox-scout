@@ -1,10 +1,12 @@
 """
-Test: runner protected-text blocks are surfaced with the matched term.
+Test: runner protected-text matching uses word boundaries.
 
 Proves:
-- find_protected_text_terms returns the matched term(s)
-- validate_candidate skip reason includes matched term
-- audit_item returns runner_block bucket with matched term in human_reason
+- "irs" does NOT match "first" (false positive fixed)
+- "irs" still matches "IRS notice" and "irs.gov"
+- Claude/product emails with "first" in subject are no longer runner-blocked
+- Real IRS/tax emails are still blocked with the matched term in reason
+- find_protected_text_terms and validate_candidate surface matched terms accurately
 
 Run:
   $env:PYTHONPATH = "src"; .venv/Scripts/python.exe -m unittest tests.test_runner_protected_text_visibility -v
@@ -40,15 +42,37 @@ def _queue_item(**kw):
 
 class TestFindProtectedTextTerms(unittest.TestCase):
 
-    def test_irs_in_first_is_detected(self):
+    def test_first_in_subject_does_not_match_irs(self):
         from inbox_scout.trash_execution_runner import find_protected_text_terms
-        item = _queue_item(subject="Ship your first major feature")
+        item = _queue_item(subject="Ship your first major feature with Claude Code")
+        matched = find_protected_text_terms(item)
+        self.assertNotIn("irs", matched)
+
+    def test_first_in_title_does_not_match_irs(self):
+        from inbox_scout.trash_execution_runner import find_protected_text_terms
+        item = _queue_item(subject="Make AI Ask Questions First")
+        matched = find_protected_text_terms(item)
+        self.assertNotIn("irs", matched)
+
+    def test_first_commit_snippet_does_not_match_irs(self):
+        from inbox_scout.trash_execution_runner import find_protected_text_terms
+        item = _queue_item(
+            subject="Welcome to Claude Code",
+            snippet="Ship your first commit in 5 minutes.",
+        )
+        matched = find_protected_text_terms(item)
+        self.assertNotIn("irs", matched)
+
+    def test_irs_notice_still_matches(self):
+        from inbox_scout.trash_execution_runner import find_protected_text_terms
+        item = _queue_item(subject="IRS notice: action required on your account")
         matched = find_protected_text_terms(item)
         self.assertIn("irs", matched)
 
-    def test_ask_questions_first_is_detected(self):
+    def test_irs_gov_still_matches(self):
         from inbox_scout.trash_execution_runner import find_protected_text_terms
-        item = _queue_item(subject="Make AI Ask Questions First")
+        # "." is non-word so \birs\b matches "irs" in "irs.gov"
+        item = _queue_item(subject="Visit irs.gov for your tax refund status")
         matched = find_protected_text_terms(item)
         self.assertIn("irs", matched)
 
@@ -58,7 +82,7 @@ class TestFindProtectedTextTerms(unittest.TestCase):
         matched = find_protected_text_terms(item)
         self.assertEqual(matched, [])
 
-    def test_real_protected_term_detected(self):
+    def test_real_protected_terms_detected(self):
         from inbox_scout.trash_execution_runner import find_protected_text_terms
         item = _queue_item(subject="Your receipt from Anthropic", snippet="Payment confirmed.")
         matched = find_protected_text_terms(item)
@@ -68,10 +92,22 @@ class TestFindProtectedTextTerms(unittest.TestCase):
 
 class TestValidateCandidateSurfacedReason(unittest.TestCase):
 
-    def test_skip_reason_includes_matched_term(self):
+    def test_claude_code_first_email_now_passes(self):
+        # After fix: "first" no longer triggers IRS block
         from inbox_scout.inbox_cleanup_runner import validate_candidate
         candidate = {"queue_id": "12"}
         item = _queue_item(queue_id="12", subject="Ship your first major feature with Claude Code")
+        ok, reason = validate_candidate(candidate, [item])
+        self.assertTrue(ok, f"expected pass after irs fix; reason: {reason}")
+
+    def test_real_irs_email_blocked_with_matched_term(self):
+        from inbox_scout.inbox_cleanup_runner import validate_candidate
+        candidate = {"queue_id": "55"}
+        item = _queue_item(
+            queue_id="55",
+            subject="IRS notice: action required",
+            snippet="Please review your tax filing.",
+        )
         ok, reason = validate_candidate(candidate, [item])
         self.assertFalse(ok)
         self.assertIn("irs", reason)
@@ -81,20 +117,34 @@ class TestValidateCandidateSurfacedReason(unittest.TestCase):
         candidate = {"queue_id": "99"}
         item = _queue_item(
             queue_id="99",
+            category="Promotion",
             subject="Daily Deals: More ways to save",
-            from_="deals@newsletter.example.com",
+            **{"from": "deals@newsletter.example.com"},
             snippet="Shop brands you love. Unsubscribe anytime.",
         )
-        item["from"] = item.pop("from_", item.get("from", ""))
         ok, reason = validate_candidate(candidate, [item])
         self.assertTrue(ok, f"expected pass; reason: {reason}")
 
 
 class TestAuditItemRunnerBlock(unittest.TestCase):
 
-    def test_newsletter_with_first_in_subject_is_runner_block(self):
+    def test_newsletter_with_first_is_now_trash_candidate(self):
         from inbox_scout.queue_audit import audit_item
         item = _queue_item(subject="Ship your first major feature with Claude Code")
+        bucket, code, _ = audit_item(item)
+        self.assertEqual(bucket, "trash_candidate")
+        self.assertEqual(code, "trash_candidate_newsletter_promotion")
+
+    def test_questions_first_newsletter_is_now_trash_candidate(self):
+        from inbox_scout.queue_audit import audit_item
+        item = _queue_item(category="Newsletter", subject="Make AI Ask Questions First")
+        bucket, code, _ = audit_item(item)
+        self.assertEqual(bucket, "trash_candidate")
+        self.assertEqual(code, "trash_candidate_newsletter_promotion")
+
+    def test_irs_notice_newsletter_is_still_runner_block(self):
+        from inbox_scout.queue_audit import audit_item
+        item = _queue_item(subject="IRS notice: action required on your account")
         bucket, code, human = audit_item(item)
         self.assertEqual(bucket, "runner_block")
         self.assertEqual(code, "final_runner_blocked_by_protected_text")
@@ -109,18 +159,6 @@ class TestAuditItemRunnerBlock(unittest.TestCase):
         bucket, code, _ = audit_item(item)
         self.assertEqual(bucket, "trash_candidate")
         self.assertEqual(code, "trash_candidate_newsletter_promotion")
-
-    def test_personal_marketing_rescue_with_protected_text_is_runner_block(self):
-        from inbox_scout.queue_audit import audit_item
-        item = _queue_item(
-            category="Personal",
-            subject="Special offer — save on your first order",
-            snippet="Unsubscribe anytime.",
-        )
-        bucket, code, human = audit_item(item)
-        self.assertEqual(bucket, "runner_block")
-        self.assertEqual(code, "final_runner_blocked_by_protected_text")
-        self.assertIn("irs", human)
 
 
 if __name__ == "__main__":
