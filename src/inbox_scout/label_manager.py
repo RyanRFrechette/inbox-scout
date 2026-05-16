@@ -13,6 +13,13 @@ INBOX_SCOUT_LABELS = [
     "InboxScout/Keep",
     "InboxScout/Review Later",
     "InboxScout/Ignore",
+    "InboxScout/Shopping-History",
+    "InboxScout/Receipts",
+    "InboxScout/Security",
+    "InboxScout/Finance",
+    "InboxScout/Accounts",
+    "InboxScout/Jobs",
+    "InboxScout/Review",
 ]
 
 
