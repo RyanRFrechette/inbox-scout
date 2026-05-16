@@ -25,7 +25,7 @@ from inbox_scout.trash_sender_block_runner import build_sender_block_runner_mess
 from inbox_scout.model_router import get_provider, set_provider, model_status_message, get_active_provider, OLLAMA_MODEL, OPENROUTER_MODEL
 from inbox_scout.mark_read_runner import build_mark_read_plan_message, build_mark_read_runner_message
 from inbox_scout.queue_decision import build_set_decision_message
-from inbox_scout.autopilot_cleanup import run_autopilot_cleanup
+from inbox_scout.autopilot_cleanup import run_autopilot_cleanup, run_inbox_zero_autopilot
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -252,6 +252,20 @@ def _is_autopilot_cleanup(msg: str) -> bool:
     return bool(re.search(r"\b(sort|clean)\s+\d+\b", msg))
 
 
+_INBOX_ZERO_PHRASES = [
+    "sort all",
+    "clean all",
+    "get me to inbox zero",
+    "file my inbox",
+    "sort my whole inbox",
+    "clean my whole inbox",
+]
+
+
+def _is_inbox_zero(msg: str) -> bool:
+    return any(phrase in msg for phrase in _INBOX_ZERO_PHRASES)
+
+
 def handle_natural_message(text: str) -> str:
     msg = text.lower().strip()
 
@@ -432,6 +446,9 @@ def handle_natural_message(text: str) -> str:
         "test cleanup 25",
     ]):
         return sort_plan_message(text, cleanup=True)
+
+    if _is_inbox_zero(msg):
+        return run_inbox_zero_autopilot(text)
 
     if _is_autopilot_cleanup(msg):
         return run_autopilot_cleanup(text)
