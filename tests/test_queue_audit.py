@@ -113,7 +113,7 @@ class TestAuditItemReasonCodes(unittest.TestCase):
             risk_score=10,
         )
         self.assertEqual(bucket, "unclear")
-        self.assertEqual(code, "marketing_rescue_blocked_by_danger_signal")
+        self.assertEqual(code, "blocked_by_protected_danger_signal")
         self.assertIn("Security danger", human)
 
     def test_blocked_by_shipping_danger_signal(self):
@@ -123,7 +123,7 @@ class TestAuditItemReasonCodes(unittest.TestCase):
             risk_score=10,
         )
         self.assertEqual(bucket, "unclear")
-        self.assertEqual(code, "marketing_rescue_blocked_by_danger_signal")
+        self.assertEqual(code, "blocked_by_protected_danger_signal")
         self.assertIn("Shipping danger", human)
 
     def test_blocked_by_receipt_danger_signal(self):
@@ -133,7 +133,7 @@ class TestAuditItemReasonCodes(unittest.TestCase):
             risk_score=10,
         )
         self.assertEqual(bucket, "unclear")
-        self.assertEqual(code, "marketing_rescue_blocked_by_danger_signal")
+        self.assertEqual(code, "blocked_by_protected_danger_signal")
         self.assertIn("Receipt danger", human)
 
     def test_build_audit_rows_returns_correct_shape(self):
@@ -149,6 +149,47 @@ class TestAuditItemReasonCodes(unittest.TestCase):
         self.assertIn("human_reason", rows[0])
         self.assertEqual(rows[0]["bucket"], "trash_candidate")
         self.assertEqual(rows[1]["bucket"], "protected")
+
+
+class TestPlainOutput(unittest.TestCase):
+
+    def test_plain_output_contains_expected_columns(self):
+        import io
+        from unittest.mock import patch
+        from inbox_scout.queue_audit import build_audit_rows, print_audit_plain
+
+        rows = [
+            {
+                "id": "7",
+                "subject": "Daily Deals: save big",
+                "category": "Promotion",
+                "risk": 15,
+                "manual_review": False,
+                "local_decision": "pending_review",
+                "bucket": "trash_candidate",
+                "reason_code": "trash_candidate_newsletter_promotion",
+                "human_reason": "Newsletter/Promotion — low risk.",
+            }
+        ]
+
+        with patch("inbox_scout.queue_audit.load_items", return_value=[]), \
+             patch("inbox_scout.queue_audit.build_audit_rows", return_value=rows):
+            with patch("sys.stdout", new_callable=io.StringIO) as mock_out:
+                print_audit_plain()
+                output = mock_out.getvalue()
+
+        self.assertIn("trash_candidate", output)
+        self.assertIn("trash_candidate_newsletter_promotion", output)
+        self.assertIn("Daily Deals", output)
+        self.assertIn("15", output)
+
+    def test_renamed_reason_code_not_in_codebase(self):
+        # Confirms old name is gone — audit_item never returns the old string.
+        from inbox_scout.queue_audit import audit_item
+        item = _item(category="Newsletter", subject="Verification code: 12345", risk_score=10)
+        _, code, _ = audit_item(item)
+        self.assertNotEqual(code, "marketing_rescue_blocked_by_danger_signal")
+        self.assertEqual(code, "blocked_by_protected_danger_signal")
 
 
 if __name__ == "__main__":

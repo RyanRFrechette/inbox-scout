@@ -103,7 +103,7 @@ def audit_item(item: dict[str, Any]) -> tuple[str, str, str]:
             label = f"Job danger: {signals}."
         else:
             label = f"Danger signal: {signals}."
-        return "unclear", "marketing_rescue_blocked_by_danger_signal", label
+        return "unclear", "blocked_by_protected_danger_signal", label
 
     if category in TRASH_SAFE_CATEGORIES:
         return "trash_candidate", "trash_candidate_newsletter_promotion", "Newsletter/Promotion — low risk."
@@ -176,8 +176,27 @@ def print_audit_table() -> None:
     console.print(table)
 
 
+def print_audit_plain() -> None:
+    items = load_items()
+    rows = build_audit_rows(items)
+    header = f"{'ID':<4}  {'Bucket':<16}  {'Code':<38}  {'Risk':<4}  {'MR':<2}  {'Category':<18}  Subject"
+    print(header)
+    print("-" * len(header))
+    for row in rows:
+        subject = row["subject"][:50]
+        print(
+            f"{row['id']:<4}  {row['bucket']:<16}  {row['reason_code']:<38}"
+            f"  {row['risk']:<4}  {'Y' if row['manual_review'] else 'N':<2}"
+            f"  {row['category']:<18}  {subject}"
+        )
+
+
 def main() -> None:
-    print_audit_table()
+    import sys
+    if "--plain" in sys.argv:
+        print_audit_plain()
+    else:
+        print_audit_table()
 
 
 if __name__ == "__main__":
