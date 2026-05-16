@@ -46,8 +46,8 @@ MARKETING_RESCUE_CATEGORIES = {"personal", "archive candidate"}
 MARKETING_TERMS = {
     "sale", "promo", "promotion", "discount", "coupon", "cart", "shopping cart",
     "still looking", "we miss you", "new arrivals", "summer looks", "daily digest",
-    "tips", "newsletter", "unsubscribe", "limited time", "deal", "deals", "offer",
-    "shop now", "no-reply", "noreply",
+    "tips", "newsletter", "unsubscribe", "limited time", "deal", "deals",
+    "special offer", "shop now", "no-reply", "noreply",
 }
 
 
@@ -55,8 +55,9 @@ PROTECTED_DANGER_TERMS = {
     "payment", "receipt", "invoice", "bill", "statement", "order confirmation",
     "shipped", "delivered", "tracking", "password", "login", "security alert",
     "security", "recovery email updated", "verification code", "account access",
-    "legal", "medical", "job application", "application", "offer letter",
-    "interview", "tax", "bank", "paypal", "cash app",
+    "legal", "medical", "job application", "job offer", "offer letter",
+    "offer extended", "recruiter", "hiring", "candidate", "application status",
+    "application", "interview", "tax", "bank", "paypal", "cash app",
 }
 
 # Job/career and Client/business can be AI false positives for marketing emails.

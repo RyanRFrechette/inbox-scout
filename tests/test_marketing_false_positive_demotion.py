@@ -150,5 +150,80 @@ class TestDemoteMarketingFalsePositive(unittest.TestCase):
         self.assertTrue(ok, f"expected safe after demotion; reason: {reason}")
 
 
+class TestJobOfferFalsePositive(unittest.TestCase):
+    """Verify the job-offer false-positive gap is closed after removing bare 'offer'
+    from MARKETING_TERMS and adding job-career danger phrases."""
+
+    def test_special_offer_limited_time_still_qualifies_as_marketing(self):
+        from inbox_scout.ai_classifier import _demote_marketing_false_positive
+        email = _email(
+            subject="Special offer — limited time deal just for you",
+            from_="no-reply@deals.example.com",
+            snippet="Save big. Shop now.",
+        )
+        result = _demote_marketing_false_positive(email, _result(category="Client/business"))
+        self.assertEqual(result["category"], "Promotion")
+
+    def test_job_offer_extended_not_demoted(self):
+        from inbox_scout.ai_classifier import _demote_marketing_false_positive
+        email = _email(
+            subject="Job offer extended — Software Engineer at Acme",
+            from_="no-reply@ats.workday.com",
+            snippet="We are pleased to extend this offer.",
+        )
+        result = _demote_marketing_false_positive(email, _result(category="Job/career"))
+        self.assertEqual(result["category"], "Job/career")
+
+    def test_offer_letter_not_demoted(self):
+        from inbox_scout.ai_classifier import _demote_marketing_false_positive
+        email = _email(
+            subject="Your offer letter from Acme Corp",
+            from_="no-reply@hr.acme.com",
+            snippet="Please review and sign your offer letter.",
+        )
+        result = _demote_marketing_false_positive(email, _result(category="Job/career"))
+        self.assertEqual(result["category"], "Job/career")
+
+    def test_recruiter_email_not_demoted(self):
+        from inbox_scout.ai_classifier import _demote_marketing_false_positive
+        email = _email(
+            subject="A recruiter wants to connect",
+            from_="no-reply@linkedin.com",
+            snippet="A recruiter is interested in your profile.",
+        )
+        result = _demote_marketing_false_positive(email, _result(category="Job/career"))
+        self.assertEqual(result["category"], "Job/career")
+
+    def test_hiring_email_not_demoted(self):
+        from inbox_scout.ai_classifier import _demote_marketing_false_positive
+        email = _email(
+            subject="We're hiring — join our newsletter team",
+            from_="no-reply@jobs.example.com",
+            snippet="Hiring now for senior roles.",
+        )
+        result = _demote_marketing_false_positive(email, _result(category="Job/career"))
+        self.assertEqual(result["category"], "Job/career")
+
+    def test_application_status_not_demoted(self):
+        from inbox_scout.ai_classifier import _demote_marketing_false_positive
+        email = _email(
+            subject="Application status update",
+            from_="no-reply@ats.greenhouse.io",
+            snippet="Your application status has changed.",
+        )
+        result = _demote_marketing_false_positive(email, _result(category="Job/career"))
+        self.assertEqual(result["category"], "Job/career")
+
+    def test_candidate_email_not_demoted(self):
+        from inbox_scout.ai_classifier import _demote_marketing_false_positive
+        email = _email(
+            subject="Next steps for candidate review",
+            from_="no-reply@lever.co",
+            snippet="As a candidate you have been selected.",
+        )
+        result = _demote_marketing_false_positive(email, _result(category="Job/career"))
+        self.assertEqual(result["category"], "Job/career")
+
+
 if __name__ == "__main__":
     unittest.main()
