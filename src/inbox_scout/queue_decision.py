@@ -71,7 +71,9 @@ def build_set_decision_message(text: str) -> str | None:
     old_decision = target.get("local_decision", "unknown")
     target["local_decision"] = matched_decision
     target["decision_updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    target["gmail_action_taken"] = False
+    # Preserve gmail_action_taken/gmail_action_type if a Gmail action already ran
+    if not (target.get("gmail_action_taken") or target.get("gmail_action_type")):
+        target["gmail_action_taken"] = False
 
     if not is_list:
         payload["last_updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

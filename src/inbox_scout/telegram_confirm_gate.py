@@ -1,7 +1,5 @@
 ﻿from __future__ import annotations
 
-from __future__ import annotations
-
 import json
 import re
 from datetime import datetime, timezone
@@ -133,6 +131,12 @@ def _execute_confirmed_action(action: str, queue_id: str, item: dict) -> str:
     original, items = _load_full_queue()
     live_item = next((i for i in items if get_queue_id(i) == queue_id), None)
     if not live_item:
+        log_confirm_attempt({
+            "timestamp": now_iso(), "command": f"confirm {action} {queue_id}",
+            "action": action, "queue_id": queue_id, "message_id": message_id,
+            "status": "ITEM_MISSING_AT_EXECUTION", "gmail_changed": False,
+            "mark_read_success": False, "error": "Item not found in queue at execution time",
+        })
         return f"Queue item {queue_id} not found at execution time. Gmail not touched."
 
     action_taken = False

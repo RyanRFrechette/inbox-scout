@@ -142,6 +142,38 @@ class TestDecisionSafety(unittest.TestCase):
         # Service helpers that touch Gmail must never be called
         self.assertIn("no queue found", result.lower())
 
+    def test_already_actioned_item_preserves_gmail_fields(self):
+        """keep N on a trashed item must not reset gmail_action_taken or gmail_action_type."""
+        import inbox_scout.queue_decision as qd
+        payload = {
+            "queue_items": [
+                {
+                    "queue_id": 4,
+                    "subject": "Already trashed",
+                    "local_decision": "ignore",
+                    "gmail_action_taken": True,
+                    "gmail_action_type": "trashed",
+                }
+            ]
+        }
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as f:
+            json.dump(payload, f)
+            tmp = Path(f.name)
+        orig_q, orig_d = qd.LATEST_QUEUE_FILE, qd.QUEUE_DIR
+        qd.LATEST_QUEUE_FILE = tmp
+        qd.QUEUE_DIR = tmp.parent
+        try:
+            build_set_decision_message("keep 4")
+            saved = json.loads(tmp.read_text(encoding="utf-8"))
+        finally:
+            qd.LATEST_QUEUE_FILE = orig_q
+            qd.QUEUE_DIR = orig_d
+            tmp.unlink(missing_ok=True)
+        item = saved["queue_items"][0]
+        self.assertEqual(item["local_decision"], "keep")
+        self.assertTrue(item["gmail_action_taken"], "gmail_action_taken must stay True")
+        self.assertEqual(item["gmail_action_type"], "trashed", "gmail_action_type must stay 'trashed'")
+
 
 class TestNaturalIntentRouting(unittest.TestCase):
     def test_keep_4_routes_through_natural_intent(self):
