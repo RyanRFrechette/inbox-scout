@@ -113,7 +113,7 @@ def run_command(args: list[str]) -> subprocess.CompletedProcess[str]:
         cwd=str(PROJECT_ROOT),
         env=env,
         capture_output=True,
-        timeout=300,
+        timeout=900,
         encoding="utf-8",
         errors="replace",
     )

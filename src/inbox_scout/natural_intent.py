@@ -22,7 +22,7 @@ from inbox_scout.inbox_cleanup_runner import build_inbox_cleanup_runner_message
 from inbox_scout.cleanup_control import build_cleanup_status_message, build_cancel_cleanup_message
 from inbox_scout.trash_sender_block_plan import build_sender_block_plan_message
 from inbox_scout.trash_sender_block_runner import build_sender_block_runner_message
-from inbox_scout.model_router import get_provider, set_provider, model_status_message
+from inbox_scout.model_router import get_provider, set_provider, model_status_message, get_active_provider, OLLAMA_MODEL, OPENROUTER_MODEL
 from inbox_scout.mark_read_runner import build_mark_read_plan_message, build_mark_read_runner_message
 
 
@@ -74,11 +74,17 @@ def sort_plan_message(text: str, continuation: bool = False, cleanup: bool = Fal
             "Gmail not touched."
         )
 
+    _limit = plan.requested_limit or 5
+    _prov = get_active_provider(batch_size=_limit)
+    _model = OPENROUTER_MODEL if _prov == "openrouter" else OLLAMA_MODEL
+    _prov_line = f"Using {_prov}: {_model}"
+
     if plan.sort_all:
         if plan.is_continuation:
             return (
                 "I will scan the next 5 unread emails from where the last batch left off.\n"
                 "Say continue sorting again after this batch to advance.\n\n"
+                f"{_prov_line}\n"
                 "Read-only. No Gmail changes.\n\n"
                 "Reply yes to scan this batch, or cancel to stop."
             )
@@ -87,6 +93,7 @@ def sort_plan_message(text: str, continuation: bool = False, cleanup: bool = Fal
                 f"I will scan only up to {plan.requested_limit} unread inbox emails in read-only batches of 5.\n"
                 "After scanning, I will build a local cleanup plan.\n"
                 "I will not move anything until you review the candidates and say move trash.\n\n"
+                f"{_prov_line}\n"
                 "Read-only. No Gmail changes.\n\n"
                 "Reply yes to scan this test batch, or cancel to stop."
             )
@@ -96,18 +103,21 @@ def sort_plan_message(text: str, continuation: bool = False, cleanup: bool = Fal
                 "This may take a while depending on how many unread emails you have.\n"
                 "After scanning, I will build a local cleanup plan.\n"
                 "I will not move anything until you say move trash.\n\n"
+                f"{_prov_line}\n"
                 "Read-only. No Gmail changes.\n\n"
                 "Reply yes to scan, or cancel to stop."
             )
         return (
             "I will scan the first 5 unread emails and build a review queue.\n"
             "Say continue sorting after each batch to advance.\n\n"
+            f"{_prov_line}\n"
             "Read-only. No Gmail changes.\n\n"
             "Reply yes to scan this batch, or cancel to stop."
         )
 
     return (
         f"I will scan {plan.requested_limit} unread emails and build a review queue.\n\n"
+        f"{_prov_line}\n"
         "Read-only. No Gmail changes.\n\n"
         "Reply yes to scan, or cancel to stop."
     )

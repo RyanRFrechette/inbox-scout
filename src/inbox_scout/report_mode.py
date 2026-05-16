@@ -7,6 +7,7 @@ from rich.console import Console
 from rich.table import Table
 
 from inbox_scout.ai_classifier import classify_with_ai
+from inbox_scout.model_router import OLLAMA_MODEL, OPENROUTER_MODEL, get_active_provider
 from inbox_scout.gmail_auth import get_gmail_service
 from inbox_scout.inbox_fetcher import get_header
 from inbox_scout.rule_classifier import classify_email, load_json, load_lines
@@ -121,6 +122,10 @@ def classify_for_report(emails):
     results = []
     total = len(emails)
 
+    provider = get_active_provider(batch_size=total)
+    model = OPENROUTER_MODEL if provider == "openrouter" else OLLAMA_MODEL
+    console.print(f"Scanning {total} email(s) using {provider}: {model}...")
+
     for index, email in enumerate(emails, start=1):
         subject = str(email.get("subject") or "(no subject)")[:80]
         console.print(f"[dim]Classifying {index}/{total}: {subject}[/dim]")
@@ -140,6 +145,11 @@ def classify_for_report(emails):
                 "suggested_action": rule_result.get("suggested_action", "Manual review."),
                 "reason": "AI classifier timeout/error. Used rule-based fallback."
             }
+
+        category = ai_result.get("category", "unknown")
+        risk = ai_result.get("risk_score", "?")
+        decision = "manual" if ai_result.get("manual_review") else "ok"
+        console.print(f"[{index}/{total}] {category} | risk {risk} | {decision}")
 
         results.append({
             **email,

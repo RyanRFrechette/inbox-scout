@@ -16,7 +16,15 @@ LATEST_SCAN_QUEUE_PLAN = PLANS_DIR / "latest_scan_queue_plan.json"
 LATEST_SCAN_QUEUE_RUN = PLANS_DIR / "latest_scan_queue_run.json"
 LATEST_GMAIL_SCAN_CURSOR = PLANS_DIR / "latest_gmail_scan_cursor.json"
 
+from inbox_scout.model_router import OLLAMA_MODEL, OPENROUTER_MODEL, get_active_provider
+
 PLAN_MAX_AGE_MINUTES = 30
+
+
+def _provider_label(limit: int) -> str:
+    provider = get_active_provider(batch_size=limit)
+    model = OPENROUTER_MODEL if provider == "openrouter" else OLLAMA_MODEL
+    return f"Using {provider}: {model}"
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -77,7 +85,7 @@ def run_scan_queue_runner() -> subprocess.CompletedProcess[str]:
         env=env,
         text=True,
         capture_output=True,
-        timeout=300,
+        timeout=900,
     )
 
 
@@ -115,7 +123,16 @@ def build_scan_approval_response(_: str = "") -> str:
         from inbox_scout.inbox_cleanup_full_scan import run_full_cleanup_scan
         return run_full_cleanup_scan()
 
-    result = run_scan_queue_runner()
+    limit = plan.get("requested_limit") or 5
+
+    try:
+        result = run_scan_queue_runner()
+    except subprocess.TimeoutExpired:
+        return (
+            "Scan timed out after 15 minutes. Gmail was not touched.\n\n"
+            f"{_provider_label(limit)}\n\n"
+            "Try a smaller batch: say 'sort 5 emails' then yes."
+        )
 
     run_data = load_json(LATEST_SCAN_QUEUE_RUN)
 
@@ -133,11 +150,11 @@ def build_scan_approval_response(_: str = "") -> str:
 
     is_cleanup = plan.get("cleanup_mode") is True
     is_sort_all = plan.get("sort_all") is True
-    limit = plan.get("requested_limit") or 5
 
     base = (
         f"Done. Scanned {limit} unread emails.\n\n"
         f"Total: {total} | Protected: {protected} | Pending: {pending}\n\n"
+        f"{_provider_label(limit)}\n"
         "Read-only. No Gmail changes."
     )
 
