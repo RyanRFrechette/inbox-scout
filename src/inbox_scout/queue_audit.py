@@ -21,6 +21,7 @@ from inbox_scout.trash_candidate_plan import (
     clean,
     has_obvious_marketing_signal,
     has_protected_danger_signal,
+    is_shopping_history_soft,
     is_true,
     load_items,
     risk_int,
@@ -63,6 +64,7 @@ def audit_item(item: dict[str, Any]) -> tuple[str, str, str]:
     """Return (bucket, reason_code, human_reason) for one queue item.
 
     Mirrors is_safe_trash_candidate logic exactly — no behaviour change.
+    shopping_history_soft is audit-only visibility; runner still treats these as protected.
     """
     category = clean(item.get("category")).lower()
     risk = risk_int(item)
@@ -70,6 +72,13 @@ def audit_item(item: dict[str, Any]) -> tuple[str, str, str]:
 
     if already_handled(item):
         return "handled", "already_handled", "Gmail action already taken."
+
+    if is_shopping_history_soft(item):
+        return (
+            "shopping_history_soft",
+            "soft_shopping_history",
+            "Old/low-risk shipped or delivered retail history candidate for future archive review. Not auto-handled.",
+        )
 
     if is_true(item.get("manual_review")):
         code = _CATEGORY_REASON_CODES.get(category, "protected_manual_review")
@@ -167,6 +176,7 @@ def print_audit_table() -> None:
         "trash_candidate": "green",
         "unclear": "yellow",
         "runner_block": "magenta",
+        "shopping_history_soft": "cyan",
         "handled": "dim",
     }
     for row in rows:

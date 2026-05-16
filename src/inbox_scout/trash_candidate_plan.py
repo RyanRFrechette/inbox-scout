@@ -98,6 +98,42 @@ def is_marketing_false_positive_protected(item: dict[str, Any]) -> bool:
     return has_obvious_marketing_signal(item)
 
 
+# --- Shopping history soft bucket (audit-only visibility, no behavior change) ---
+
+_SHOPPING_HISTORY_SOFT_CATEGORIES = frozenset({"bills/receipts"})
+
+_SHOPPING_HISTORY_SOFT_PREFIXES = ("shipped:", "delivered:")
+
+# Danger terms that disqualify a shipping email from the soft bucket.
+# Covers active financial, security, refund/return, and legal signals.
+# Age gate (>= 30 days) is deferred — implement once date parsing is confirmed safe.
+_SHOPPING_HISTORY_SOFT_DANGER = frozenset({
+    "payment", "receipt", "invoice", "bill", "statement",
+    "refund", "return", "dropoff", "account", "login", "password",
+    "security", "bank", "paypal", "cash app", "legal", "medical", "job", "tax",
+})
+
+
+def is_shopping_history_soft(item: dict[str, Any]) -> bool:
+    """True for shipped/delivered retail emails with no payment/security/refund signal.
+
+    Audit-only — does not affect cleanup plan or runner behavior.
+    Age gate (>= 30 days) deferred to a later step.
+    """
+    category = clean(item.get("category")).lower()
+    if category not in _SHOPPING_HISTORY_SOFT_CATEGORIES:
+        return False
+
+    subject = clean(item.get("subject")).lower()
+    if not any(subject.startswith(prefix) for prefix in _SHOPPING_HISTORY_SOFT_PREFIXES):
+        return False
+
+    if _matches_any_term(_signal_text(item), _SHOPPING_HISTORY_SOFT_DANGER):
+        return False
+
+    return True
+
+
 @dataclass
 class TrashCandidate:
     queue_id: str
