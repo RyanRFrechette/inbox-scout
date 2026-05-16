@@ -9,14 +9,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from inbox_scout.model_router import OLLAMA_MODEL, OPENROUTER_MODEL, get_active_provider
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PLANS_DIR = PROJECT_ROOT / "data" / "plans"
 LATEST_SCAN_QUEUE_PLAN = PLANS_DIR / "latest_scan_queue_plan.json"
 LATEST_SCAN_QUEUE_RUN = PLANS_DIR / "latest_scan_queue_run.json"
 LATEST_GMAIL_SCAN_CURSOR = PLANS_DIR / "latest_gmail_scan_cursor.json"
-
-from inbox_scout.model_router import OLLAMA_MODEL, OPENROUTER_MODEL, get_active_provider
 
 PLAN_MAX_AGE_MINUTES = 30
 
@@ -124,13 +124,14 @@ def build_scan_approval_response(_: str = "") -> str:
         return run_full_cleanup_scan()
 
     limit = plan.get("requested_limit") or 5
+    provider_label = _provider_label(limit)
 
     try:
         result = run_scan_queue_runner()
     except subprocess.TimeoutExpired:
         return (
             "Scan timed out after 15 minutes. Gmail was not touched.\n\n"
-            f"{_provider_label(limit)}\n\n"
+            f"{provider_label}\n\n"
             "Try a smaller batch: say 'sort 5 emails' then yes."
         )
 
@@ -154,7 +155,7 @@ def build_scan_approval_response(_: str = "") -> str:
     base = (
         f"Done. Scanned {limit} unread emails.\n\n"
         f"Total: {total} | Protected: {protected} | Pending: {pending}\n\n"
-        f"{_provider_label(limit)}\n"
+        f"{provider_label}\n"
         "Read-only. No Gmail changes."
     )
 
