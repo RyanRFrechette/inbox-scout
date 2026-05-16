@@ -12,6 +12,7 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 
+from inbox_scout.env_loader import load_env, env_status
 from inbox_scout.telegram_listener import run_once
 
 
@@ -108,6 +109,9 @@ def acquire_single_instance_lock() -> socket.socket:
 
 
 def main() -> None:
+    load_env()
+    log(f"Env loaded. {env_status()}")
+
     kill_stale_watchers()
 
     if refuse_global_python():
