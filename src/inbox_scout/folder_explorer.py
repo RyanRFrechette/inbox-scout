@@ -53,6 +53,7 @@ LABEL_ALIASES: dict[str, str] = {
 _SORTED_ALIASES = sorted(LABEL_ALIASES, key=len, reverse=True)
 
 _TIME_RE = re.compile(r"last\s+(\d+)\s+days?")
+_SHOW_IN_RE = re.compile(r"\b(show|list)\b.{0,30}\bin\b", re.IGNORECASE)
 
 _SHOPPING_TERMS = frozenset({
     "amazon", "order", "shipment", "shipped", "delivery", "receipt",
@@ -136,11 +137,13 @@ def parse_drilldown(text: str) -> tuple[Optional[str], int, bool]:
 
 
 def is_drilldown_phrase(text: str) -> bool:
-    """True if text has a time range AND a recognizable label keyword."""
-    has_time = bool(_TIME_RE.search(text.lower()) or
-                    any(w in text.lower() for w in ("this week", "last week", "this month", "last month")))
+    """True if text is a folder drilldown request: time+label, or show/list … in <label>."""
+    t = text.lower()
+    has_time = bool(_TIME_RE.search(t) or
+                    any(w in t for w in ("this week", "last week", "this month", "last month")))
     has_label = resolve_label(text) is not None
-    return has_time and has_label
+    has_show_in = bool(_SHOW_IN_RE.search(text))
+    return has_label and (has_time or has_show_in)
 
 
 def build_folder_counts_message() -> str:

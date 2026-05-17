@@ -82,8 +82,17 @@ class TestIsDrilldownPhrase(unittest.TestCase):
     def test_no_label_not_drilldown(self):
         self.assertFalse(self._check("what happened last 7 days"))
 
-    def test_no_time_not_drilldown(self):
-        self.assertFalse(self._check("show emails in Finance"))
+    def test_no_time_no_show_not_drilldown(self):
+        self.assertFalse(self._check("emails in Finance"))
+
+    def test_show_emails_in_label_is_drilldown(self):
+        self.assertTrue(self._check("show emails in Finance"))
+
+    def test_show_emails_in_label_with_month_is_drilldown(self):
+        self.assertTrue(self._check("show emails in Promotions this month"))
+
+    def test_show_me_emails_in_label_is_drilldown(self):
+        self.assertTrue(self._check("show me emails in Finance this month"))
 
     def test_this_week_with_label(self):
         self.assertTrue(self._check("what is in Receipts this week"))
@@ -375,6 +384,30 @@ class TestNaturalIntentFolderRouting(unittest.TestCase):
              patch("inbox_scout.natural_intent.parse_drilldown", return_value=(None, 0, False)):
             result = ni.handle_natural_message("what happened last 7 days")
         self.assertIn("InboxScout folder", result)
+
+    def test_show_emails_in_promotions_this_month_routes_to_drilldown(self):
+        from inbox_scout import natural_intent as ni
+        with patch("inbox_scout.natural_intent.build_drilldown_message", return_value="DRILL_OK"):
+            result = ni.handle_natural_message("show emails in Promotions this month")
+        self.assertEqual(result, "DRILL_OK")
+
+    def test_show_emails_in_promotions_no_time_routes_to_drilldown(self):
+        from inbox_scout import natural_intent as ni
+        with patch("inbox_scout.natural_intent.build_drilldown_message", return_value="DRILL_OK"):
+            result = ni.handle_natural_message("show emails in Promotions")
+        self.assertEqual(result, "DRILL_OK")
+
+    def test_show_me_emails_in_finance_this_month_routes_to_drilldown(self):
+        from inbox_scout import natural_intent as ni
+        with patch("inbox_scout.natural_intent.build_drilldown_message", return_value="DRILL_OK"):
+            result = ni.handle_natural_message("show me emails in Finance this month")
+        self.assertEqual(result, "DRILL_OK")
+
+    def test_queue_phrase_without_folder_still_routes_to_queue(self):
+        from inbox_scout import natural_intent as ni
+        with patch("inbox_scout.natural_intent.queue_summary", return_value="QUEUE_OK"):
+            result = ni.handle_natural_message("show me the queue")
+        self.assertEqual(result, "QUEUE_OK")
 
     def test_inbox_count_phrase_still_deterministic(self):
         from inbox_scout import natural_intent as ni

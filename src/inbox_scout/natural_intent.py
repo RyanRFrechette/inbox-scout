@@ -505,6 +505,32 @@ def handle_natural_message(text: str) -> str:
     ]):
         return build_review_plan_message()
 
+    # --- Read-only folder/label explorer (must run before generic "show emails" queue check) ---
+    if any(phrase in msg for phrase in [
+        "show my folders",
+        "show my archives",
+        "what folders do i have",
+        "what is in each folder",
+        "show inboxscout folder counts",
+        "give me a folder breakdown",
+        "folder breakdown",
+        "folder counts",
+        "my folders",
+        "label counts",
+        "show labels",
+        "inboxscout folders",
+    ]):
+        return build_folder_counts_message()
+
+    if is_drilldown_phrase(msg):
+        label, days, summarize = parse_drilldown(msg)
+        if label is None:
+            return (
+                "Which InboxScout folder? Try: Receipts, Finance, Promotions, "
+                "Newsletters, Security, Jobs, Personal, Medical, Legal-Tax, Shopping-History."
+            )
+        return build_drilldown_message(label, days or 7, summarize=summarize)
+
     if any(phrase in msg for phrase in ["queue", "show emails", "show my emails", "latest batch"]):
         return queue_summary()
 
@@ -601,32 +627,6 @@ def handle_natural_message(text: str) -> str:
         "junk to trash",
     ]):
         return sort_plan_message(text)
-
-    # --- Read-only folder/label explorer ---
-    if any(phrase in msg for phrase in [
-        "show my folders",
-        "show my archives",
-        "what folders do i have",
-        "what is in each folder",
-        "show inboxscout folder counts",
-        "give me a folder breakdown",
-        "folder breakdown",
-        "folder counts",
-        "my folders",
-        "label counts",
-        "show labels",
-        "inboxscout folders",
-    ]):
-        return build_folder_counts_message()
-
-    if is_drilldown_phrase(msg):
-        label, days, summarize = parse_drilldown(msg)
-        if label is None:
-            return (
-                "Which InboxScout folder? Try: Receipts, Finance, Promotions, "
-                "Newsletters, Security, Jobs, Personal, Medical, Legal-Tax, Shopping-History."
-            )
-        return build_drilldown_message(label, days or 7, summarize=summarize)
 
     return _llm_fallback(text)
 
