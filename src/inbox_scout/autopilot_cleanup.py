@@ -504,8 +504,9 @@ def run_inbox_zero_autopilot(text: str) -> str:
         if plan.workflow_mode != "commands_planned":
             stopped_early = True
             break
-        plan.requested_limit = min(plan.requested_limit or AUTOPILOT_MAX_LIMIT, AUTOPILOT_MAX_LIMIT)
-        plan.target = "inbox"  # scan all INBOX emails, not just unread
+        plan.requested_limit = AUTOPILOT_MAX_LIMIT
+        plan.sort_all = True   # belt-and-suspenders: signal to runner to skip --unread-only
+        plan.target = "inbox"  # primary signal: scan all INBOX, not just unread
         save_plan(plan)
 
         try:

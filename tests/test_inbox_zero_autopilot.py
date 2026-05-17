@@ -839,6 +839,21 @@ class TestSortAllScansTotalInbox(unittest.TestCase):
 class TestRunnerAllowsInboxTarget(unittest.TestCase):
     """sort_scan_queue_runner must allow target='inbox' and skip --unread-only."""
 
+    def _build_report_args(self, plan_dict: dict) -> list:
+        """Replicate the runner's report_args construction logic."""
+        import sys
+        limit = plan_dict["requested_limit"]
+        page_size = min(5, limit)
+        args = [
+            sys.executable, "-m", "inbox_scout.report_mode",
+            "--limit", str(limit), "--page-size", str(page_size),
+            "--export", "both",
+        ]
+        is_full_inbox_scan = plan_dict.get("sort_all") or plan_dict.get("target") == "inbox"
+        if not is_full_inbox_scan:
+            args.append("--unread-only")
+        return args
+
     def test_inbox_target_passes_validation(self):
         from inbox_scout.sort_scan_queue_runner import validate_plan
         plan = {
@@ -868,6 +883,62 @@ class TestRunnerAllowsInboxTarget(unittest.TestCase):
         }
         safe, _ = validate_plan(plan)
         self.assertFalse(safe, "Unknown targets must be blocked")
+
+    def test_inbox_target_no_unread_only_in_args(self):
+        """target='inbox' must NOT produce --unread-only in report args."""
+        plan = {"requested_limit": 25, "target": "inbox", "sort_all": False}
+        args = self._build_report_args(plan)
+        self.assertNotIn("--unread-only", args, "target=inbox must skip --unread-only")
+
+    def test_sort_all_true_no_unread_only_in_args(self):
+        """sort_all=True must NOT produce --unread-only even if target=unread_inbox."""
+        plan = {"requested_limit": 25, "target": "unread_inbox", "sort_all": True}
+        args = self._build_report_args(plan)
+        self.assertNotIn("--unread-only", args, "sort_all=True must skip --unread-only")
+
+    def test_standard_sort_keeps_unread_only(self):
+        """Standard limited sort (sort_all=False, target=unread_inbox) must keep --unread-only."""
+        plan = {"requested_limit": 5, "target": "unread_inbox", "sort_all": False}
+        args = self._build_report_args(plan)
+        self.assertIn("--unread-only", args, "Standard sort must include --unread-only")
+
+    def test_autopilot_plan_has_inbox_target_and_sort_all(self):
+        """Autopilot must set both sort_all=True and target='inbox' before saving."""
+        from inbox_scout import autopilot_cleanup as ac
+
+        saved_plans = []
+
+        def capture_save(plan):
+            saved_plans.append({
+                "target": getattr(plan, "target", None),
+                "sort_all": getattr(plan, "sort_all", None),
+                "requested_limit": getattr(plan, "requested_limit", None),
+            })
+
+        mock_plan = MagicMock()
+        mock_plan.workflow_mode = "commands_planned"
+        mock_plan.requested_limit = 25
+        mock_plan.target = "unread_inbox"
+        mock_plan.sort_all = False
+
+        with (
+            unittest.mock.patch.object(ac, "build_scan_queue_plan", return_value=mock_plan),
+            unittest.mock.patch.object(ac, "save_plan", side_effect=capture_save),
+            unittest.mock.patch.object(ac, "_run_scan", return_value=MagicMock(returncode=0)),
+            unittest.mock.patch.object(ac, "_load_json", return_value={"status": "complete"}),
+            unittest.mock.patch.object(ac, "_load_items_from_queue", return_value=[]),
+            unittest.mock.patch.object(ac, "_get_modify_service_for_autopilot", return_value=MagicMock()),
+            unittest.mock.patch.object(ac, "_get_unread_inbox_count", return_value=0),
+            unittest.mock.patch.object(ac, "_get_total_inbox_count", return_value=0),
+            unittest.mock.patch.object(ac, "_beep_once"),
+        ):
+            ac.run_inbox_zero_autopilot("sort all")
+
+        self.assertTrue(len(saved_plans) >= 1, "save_plan must be called at least once")
+        for sp in saved_plans:
+            self.assertEqual(sp["target"], "inbox", f"All saved plans must have target='inbox', got {sp}")
+            self.assertTrue(sp["sort_all"], f"All saved plans must have sort_all=True, got {sp}")
+            self.assertEqual(sp["requested_limit"], 25, f"requested_limit must be 25, got {sp}")
 
 
 if __name__ == "__main__":

@@ -196,8 +196,10 @@ def main() -> None:
         "both",
     ]
 
-    # Only restrict to unread for standard sorts; sort-all scans the whole inbox.
-    if plan.get("target", "unread_inbox") != "inbox":
+    # Scan all INBOX (read + unread) when sort_all=True or target="inbox".
+    # Standard limited sorts still use --unread-only.
+    is_full_inbox_scan = plan.get("sort_all") or plan.get("target") == "inbox"
+    if not is_full_inbox_scan:
         report_args.append("--unread-only")
 
     if is_continuation:
