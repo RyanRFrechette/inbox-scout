@@ -145,12 +145,11 @@ def queue_summary() -> str:
     ]
 
     lines = [
-        "Here is the current batch:",
+        f"Current batch — {len(items)} emails:",
         "",
-        f"Total emails: {len(items)}",
-        f"Protected: {len(protected)}",
+        f"Flagged for review: {len(protected)}",
         f"Already handled: {len(handled)}",
-        f"Needs review: {len(pending)}",
+        f"Still pending: {len(pending)}",
         "",
     ]
 
@@ -163,7 +162,7 @@ def queue_summary() -> str:
         lines.append(f"- {subject}")
 
     lines.append("")
-    lines.append("Gmail not touched.")
+    lines.append("No Gmail changes were made.")
     return "\n".join(lines)
 
 
@@ -174,31 +173,28 @@ def next_review_item() -> str:
         decision = clean(item.get("local_decision")).lower()
         if decision == "pending_review":
             return (
-                "Next for review:\n\n"
+                "Here's the next one:\n\n"
                 f"ID: {clean(item.get('queue_id'))}\n"
                 f"Category: {clean(item.get('category'))}\n"
                 f"Risk: {clean(item.get('risk_score') or item.get('risk'))}\n"
                 f"From: {clean(item.get('from'))}\n"
                 f"Subject: {clean(item.get('subject'))}\n\n"
-                "Gmail not touched."
+                "Nothing in Gmail has changed."
             )
 
-    return "Nothing pending in this batch. Gmail not touched."
+    return "Nothing left to review in this batch."
 
 
 def help_message() -> str:
     return (
-        "You can talk to Inbox Scout naturally.\n\n"
-        "Try saying things like:\n"
+        "Just talk to me naturally. Some things you can say:\n\n"
         "- sort 5 emails\n"
-        "- sort 25 emails\n"
         "- sort all\n"
         "- clean up my inbox\n"
-        "- move junk to trash so I can review it\n"
         "- show me the queue\n"
         "- what needs my attention?\n"
         "- how many emails are in my inbox?\n\n"
-        "Right now I can understand you naturally, but I still will not change Gmail without approval."
+        "I won't touch Gmail without your approval."
     )
 
 
