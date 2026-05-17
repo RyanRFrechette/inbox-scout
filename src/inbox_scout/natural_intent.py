@@ -312,6 +312,12 @@ def handle_natural_message(text: str) -> str:
         "inbox count",
         "how full is my inbox",
         "how many emails are in my inbox",
+        "how bad is my inbox",
+        "inbox situation",
+        "give me the inbox situation",
+        "what's my inbox looking like",
+        "whats my inbox looking like",
+        "am i close to inbox zero",
     ]):
         return build_inbox_count_message()
 
