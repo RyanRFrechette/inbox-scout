@@ -344,6 +344,7 @@ class TestRunInboxZeroAutopilotFullInbox(unittest.TestCase):
         return dict(
             _get_modify_service_for_autopilot=MagicMock(return_value=MagicMock()),
             _get_unread_inbox_count=MagicMock(return_value=n_batches * items_per_batch),
+            _get_total_inbox_count=MagicMock(return_value=n_batches * items_per_batch),
             build_scan_queue_plan=MagicMock(return_value=mock_plan),
             save_plan=MagicMock(),
             _run_scan=MagicMock(return_value=MagicMock(returncode=0)),
@@ -403,6 +404,7 @@ class TestRunInboxZeroAutopilotFullInbox(unittest.TestCase):
         with unittest.mock.patch.multiple("inbox_scout.autopilot_cleanup",
                 _get_modify_service_for_autopilot=MagicMock(return_value=MagicMock()),
                 _get_unread_inbox_count=MagicMock(return_value=0),
+                _get_total_inbox_count=MagicMock(return_value=0),
                 build_scan_queue_plan=MagicMock(return_value=mock_plan),
                 save_plan=MagicMock(),
                 _run_scan=MagicMock(return_value=MagicMock(returncode=0)),
@@ -506,6 +508,8 @@ class TestAutopilotLoopAlwaysPageOne(unittest.TestCase):
             patch.object(autopilot_cleanup, "_load_json", return_value={"status": "complete"}),
             patch.object(autopilot_cleanup, "_load_items_from_queue", return_value=[]),
             patch.object(autopilot_cleanup, "_get_modify_service_for_autopilot", return_value=MagicMock()),
+            patch.object(autopilot_cleanup, "_get_unread_inbox_count", return_value=0),
+            patch.object(autopilot_cleanup, "_get_total_inbox_count", return_value=0),
         ):
             autopilot_cleanup.run_inbox_zero_autopilot("sort all")
 
@@ -529,11 +533,341 @@ class TestAutopilotLoopAlwaysPageOne(unittest.TestCase):
             patch.object(autopilot_cleanup, "_load_json", return_value={"status": "complete"}),
             patch.object(autopilot_cleanup, "_load_items_from_queue", return_value=[]),
             patch.object(autopilot_cleanup, "_get_modify_service_for_autopilot", return_value=MagicMock()),
+            patch.object(autopilot_cleanup, "_get_unread_inbox_count", return_value=0),
+            patch.object(autopilot_cleanup, "_get_total_inbox_count", return_value=0),
         ):
             result = autopilot_cleanup.run_inbox_zero_autopilot("sort all")
 
         self.assertIn("Scanned: 0", result)
         self.assertIn("Nothing permanently deleted", result)
+
+
+class TestLabelList(unittest.TestCase):
+    """All required InboxScout labels must be present in INBOX_SCOUT_LABELS."""
+
+    def setUp(self):
+        from inbox_scout.label_manager import INBOX_SCOUT_LABELS
+        self.labels = INBOX_SCOUT_LABELS
+
+    def _assert_label(self, name: str) -> None:
+        self.assertIn(name, self.labels, f"Missing label: {name}")
+
+    def test_receipts(self): self._assert_label("InboxScout/Receipts")
+    def test_shopping_history(self): self._assert_label("InboxScout/Shopping-History")
+    def test_shipping_returns(self): self._assert_label("InboxScout/Shipping-Returns")
+    def test_security(self): self._assert_label("InboxScout/Security")
+    def test_finance(self): self._assert_label("InboxScout/Finance")
+    def test_accounts(self): self._assert_label("InboxScout/Accounts")
+    def test_jobs(self): self._assert_label("InboxScout/Jobs")
+    def test_work_business(self): self._assert_label("InboxScout/Work-Business")
+    def test_personal(self): self._assert_label("InboxScout/Personal")
+    def test_medical(self): self._assert_label("InboxScout/Medical")
+    def test_legal_tax(self): self._assert_label("InboxScout/Legal-Tax")
+    def test_subscriptions(self): self._assert_label("InboxScout/Subscriptions")
+    def test_newsletters(self): self._assert_label("InboxScout/Newsletters")
+    def test_promotions(self): self._assert_label("InboxScout/Promotions")
+    def test_social_notifications(self): self._assert_label("InboxScout/Social-Notifications")
+    def test_school_learning(self): self._assert_label("InboxScout/School-Learning")
+    def test_ai_dev_tools(self): self._assert_label("InboxScout/AI-Dev-Tools")
+    def test_review(self): self._assert_label("InboxScout/Review")
+    def test_trash_candidates(self): self._assert_label("InboxScout/Trash-Candidates")
+
+
+class TestCategoryMappingExpanded(unittest.TestCase):
+    """All new category mappings must route to the correct InboxScout label."""
+
+    def setUp(self):
+        from inbox_scout.autopilot_cleanup import _pick_inboxscout_label
+        self.pick = _pick_inboxscout_label
+
+    # Receipts — must NOT go to Finance
+    def test_invoice_to_receipts(self):
+        self.assertEqual(self.pick({"category": "invoice"}), "InboxScout/Receipts")
+
+    def test_payment_to_receipts(self):
+        self.assertEqual(self.pick({"category": "payment"}), "InboxScout/Receipts")
+
+    def test_bill_to_receipts(self):
+        self.assertEqual(self.pick({"category": "bill"}), "InboxScout/Receipts")
+
+    def test_order_confirmation_to_receipts(self):
+        self.assertEqual(self.pick({"category": "order confirmation"}), "InboxScout/Receipts")
+
+    def test_purchase_confirmation_to_receipts(self):
+        self.assertEqual(self.pick({"category": "purchase confirmation"}), "InboxScout/Receipts")
+
+    # Shopping-History
+    def test_order_to_shopping_history(self):
+        self.assertEqual(self.pick({"category": "order"}), "InboxScout/Shopping-History")
+
+    def test_delivered_to_shopping_history(self):
+        self.assertEqual(self.pick({"category": "delivered"}), "InboxScout/Shopping-History")
+
+    def test_order_delivered_to_shopping_history(self):
+        self.assertEqual(self.pick({"category": "order delivered"}), "InboxScout/Shopping-History")
+
+    # Shipping-Returns — must NOT go to Shopping-History
+    def test_shipment_to_shipping_returns(self):
+        self.assertEqual(self.pick({"category": "shipment"}), "InboxScout/Shipping-Returns")
+
+    def test_shipping_to_shipping_returns(self):
+        self.assertEqual(self.pick({"category": "shipping"}), "InboxScout/Shipping-Returns")
+
+    def test_tracking_to_shipping_returns(self):
+        self.assertEqual(self.pick({"category": "tracking"}), "InboxScout/Shipping-Returns")
+
+    def test_refund_to_shipping_returns(self):
+        self.assertEqual(self.pick({"category": "refund"}), "InboxScout/Shipping-Returns")
+
+    def test_return_to_shipping_returns(self):
+        self.assertEqual(self.pick({"category": "return"}), "InboxScout/Shipping-Returns")
+
+    # Finance — still correct for banks/tax/insurance
+    def test_finance_to_finance(self):
+        self.assertEqual(self.pick({"category": "finance"}), "InboxScout/Finance")
+
+    def test_bank_to_finance(self):
+        self.assertEqual(self.pick({"category": "bank"}), "InboxScout/Finance")
+
+    def test_tax_to_finance(self):
+        self.assertEqual(self.pick({"category": "tax"}), "InboxScout/Finance")
+
+    def test_insurance_to_finance(self):
+        self.assertEqual(self.pick({"category": "insurance"}), "InboxScout/Finance")
+
+    # AI-Dev-Tools — must NOT go to Review
+    def test_github_to_ai_dev_tools(self):
+        self.assertEqual(self.pick({"category": "github"}), "InboxScout/AI-Dev-Tools")
+
+    def test_anthropic_to_ai_dev_tools(self):
+        self.assertEqual(self.pick({"category": "anthropic"}), "InboxScout/AI-Dev-Tools")
+
+    def test_openai_to_ai_dev_tools(self):
+        self.assertEqual(self.pick({"category": "openai"}), "InboxScout/AI-Dev-Tools")
+
+    # Social-Notifications — must NOT go to Review
+    def test_reddit_to_social(self):
+        self.assertEqual(self.pick({"category": "reddit"}), "InboxScout/Social-Notifications")
+
+    def test_discord_to_social(self):
+        self.assertEqual(self.pick({"category": "discord"}), "InboxScout/Social-Notifications")
+
+    def test_social_to_social(self):
+        self.assertEqual(self.pick({"category": "social"}), "InboxScout/Social-Notifications")
+
+    # Newsletters — must NOT go to Review
+    def test_newsletter_to_newsletters(self):
+        self.assertEqual(self.pick({"category": "newsletter"}), "InboxScout/Newsletters")
+
+    def test_digest_to_newsletters(self):
+        self.assertEqual(self.pick({"category": "digest"}), "InboxScout/Newsletters")
+
+    # Promotions — must NOT go to Review
+    def test_promotion_to_promotions(self):
+        self.assertEqual(self.pick({"category": "promotion"}), "InboxScout/Promotions")
+
+    def test_marketing_to_promotions(self):
+        self.assertEqual(self.pick({"category": "marketing"}), "InboxScout/Promotions")
+
+    # Subscriptions
+    def test_subscription_to_subscriptions(self):
+        self.assertEqual(self.pick({"category": "subscription"}), "InboxScout/Subscriptions")
+
+    def test_renewal_to_subscriptions(self):
+        self.assertEqual(self.pick({"category": "renewal"}), "InboxScout/Subscriptions")
+
+    # Medical
+    def test_medical_to_medical(self):
+        self.assertEqual(self.pick({"category": "medical"}), "InboxScout/Medical")
+
+    def test_doctor_to_medical(self):
+        self.assertEqual(self.pick({"category": "doctor"}), "InboxScout/Medical")
+
+    # Legal-Tax
+    def test_legal_to_legal_tax(self):
+        self.assertEqual(self.pick({"category": "legal"}), "InboxScout/Legal-Tax")
+
+    def test_irs_to_legal_tax(self):
+        self.assertEqual(self.pick({"category": "irs"}), "InboxScout/Legal-Tax")
+
+    # Accounts
+    def test_account_update_to_accounts(self):
+        self.assertEqual(self.pick({"category": "account update"}), "InboxScout/Accounts")
+
+    # Uncertain → Review
+    def test_uncertain_to_review(self):
+        self.assertEqual(self.pick({"category": "totally_unknown_xyz"}), "InboxScout/Review")
+
+
+class TestAlwaysRemoveInboxOnLabel(unittest.TestCase):
+    """Non-protected items must always have INBOX removed after successful label."""
+
+    def _make_service(self):
+        svc = MagicMock()
+        svc.users().labels().list(userId="me").execute.return_value = {"labels": []}
+        svc.users().labels().create.return_value.execute.return_value = {"id": "Label_x"}
+        svc.users().messages().modify.return_value.execute.return_value = {}
+        return svc
+
+    def test_any_non_protected_item_removes_inbox(self):
+        from inbox_scout.autopilot_cleanup import _process_non_trash_items
+        svc = self._make_service()
+        items = [{"gmail_message_id": "MSG_NP", "category": "finance", "risk_score": 80}]
+        result = _process_non_trash_items(svc, items, {})
+        self.assertEqual(result["archived"], 1)
+        call_args = svc.users().messages().modify.call_args
+        self.assertIn("INBOX", call_args.kwargs["body"]["removeLabelIds"])
+
+    def test_read_email_still_gets_label_and_inbox_removed(self):
+        """Already-read inbox items must be labeled and have INBOX removed."""
+        from inbox_scout.autopilot_cleanup import _process_non_trash_items
+        svc = self._make_service()
+        items = [{"gmail_message_id": "MSG_READ", "category": "newsletter", "risk_score": 5}]
+        result = _process_non_trash_items(svc, items, {})
+        self.assertEqual(result["labeled"], 1)
+        call_args = svc.users().messages().modify.call_args
+        remove_labels = call_args.kwargs["body"]["removeLabelIds"]
+        self.assertIn("INBOX", remove_labels)
+
+    def test_protected_item_still_keeps_inbox(self):
+        """Protected items must NOT have INBOX removed."""
+        from inbox_scout.autopilot_cleanup import _process_non_trash_items
+        svc = self._make_service()
+        items = [{
+            "gmail_message_id": "MSG_PROT",
+            "category": "newsletter",
+            "risk_score": 5,
+            "local_decision": "protected_review",
+        }]
+        result = _process_non_trash_items(svc, items, {})
+        call_args = svc.users().messages().modify.call_args
+        remove_labels = call_args.kwargs["body"]["removeLabelIds"]
+        self.assertNotIn("INBOX", remove_labels)
+
+    def test_label_fail_does_not_remove_inbox(self):
+        """If label lookup fails, INBOX must not be removed."""
+        from inbox_scout.autopilot_cleanup import _process_non_trash_items
+        svc = MagicMock()
+        svc.users().labels().list.return_value.execute.side_effect = Exception("API error")
+        items = [{"gmail_message_id": "MSG_FAIL", "category": "newsletter", "risk_score": 5}]
+        result = _process_non_trash_items(svc, items, {})
+        self.assertEqual(result["errors"], 1)
+        svc.users().messages().modify.assert_not_called()
+
+
+class TestSortAllScansTotalInbox(unittest.TestCase):
+    """sort all must count and scan the full inbox, not just unread."""
+
+    def _base_patches(self, n_batches=1, items_per_batch=5):
+        call_count = [0]
+
+        def fake_items():
+            call_count[0] += 1
+            if call_count[0] <= n_batches:
+                return [{"gmail_message_id": f"I{call_count[0]}_{i}", "category": "newsletter", "risk_score": 5}
+                        for i in range(items_per_batch)]
+            return []
+
+        mock_plan = MagicMock()
+        mock_plan.workflow_mode = "commands_planned"
+        mock_plan.requested_limit = 25
+        mock_plan.target = "unread_inbox"
+
+        mock_cleanup = MagicMock()
+        mock_cleanup.trash_candidate_count = 0
+
+        return dict(
+            _get_modify_service_for_autopilot=MagicMock(return_value=MagicMock()),
+            _get_unread_inbox_count=MagicMock(return_value=3),
+            _get_total_inbox_count=MagicMock(return_value=n_batches * items_per_batch),
+            build_scan_queue_plan=MagicMock(return_value=mock_plan),
+            save_plan=MagicMock(),
+            _run_scan=MagicMock(return_value=MagicMock(returncode=0)),
+            _load_json=MagicMock(return_value={"status": "complete"}),
+            _load_items_from_queue=MagicMock(side_effect=fake_items),
+            build_inbox_cleanup_plan=MagicMock(return_value=mock_cleanup),
+            _process_non_trash_items=MagicMock(return_value={
+                "labeled": items_per_batch, "archived": items_per_batch,
+                "marked_read": items_per_batch, "protected": 0, "errors": 0,
+            }),
+            _beep_once=MagicMock(),
+        )
+
+    def test_report_includes_starting_inbox_total(self):
+        from inbox_scout import autopilot_cleanup as ac
+        patches = self._base_patches(n_batches=1, items_per_batch=10)
+        patches["_get_total_inbox_count"] = MagicMock(return_value=10)
+        with unittest.mock.patch.multiple("inbox_scout.autopilot_cleanup", **patches):
+            result = ac.run_inbox_zero_autopilot("sort all")
+        self.assertIn("Starting Inbox total: 10", result)
+
+    def test_report_includes_starting_unread(self):
+        from inbox_scout import autopilot_cleanup as ac
+        patches = self._base_patches(n_batches=1)
+        patches["_get_unread_inbox_count"] = MagicMock(return_value=7)
+        with unittest.mock.patch.multiple("inbox_scout.autopilot_cleanup", **patches):
+            result = ac.run_inbox_zero_autopilot("sort all")
+        self.assertIn("Starting unread: 7", result)
+
+    def test_plan_target_set_to_inbox(self):
+        """run_inbox_zero_autopilot must set plan.target='inbox' before saving."""
+        from inbox_scout import autopilot_cleanup as ac
+
+        saved_targets = []
+
+        def capture_save(plan):
+            saved_targets.append(getattr(plan, "target", None))
+
+        patches = self._base_patches(n_batches=1)
+        patches["save_plan"] = capture_save
+        with unittest.mock.patch.multiple("inbox_scout.autopilot_cleanup", **patches):
+            ac.run_inbox_zero_autopilot("sort all")
+
+        self.assertTrue(all(t == "inbox" for t in saved_targets),
+                        f"plan.target must be 'inbox' but got: {saved_targets}")
+
+    def test_stops_when_inbox_empty_not_just_unread_zero(self):
+        """Loop must stop when scan returns 0 items (inbox truly empty)."""
+        from inbox_scout import autopilot_cleanup as ac
+        patches = self._base_patches(n_batches=0)
+        with unittest.mock.patch.multiple("inbox_scout.autopilot_cleanup", **patches):
+            result = ac.run_inbox_zero_autopilot("sort all")
+        self.assertIn("Scanned: 0", result)
+        self.assertIn("Nothing permanently deleted", result)
+
+
+class TestRunnerAllowsInboxTarget(unittest.TestCase):
+    """sort_scan_queue_runner must allow target='inbox' and skip --unread-only."""
+
+    def test_inbox_target_passes_validation(self):
+        from inbox_scout.sort_scan_queue_runner import validate_plan
+        plan = {
+            "workflow_mode": "commands_planned",
+            "target": "inbox",
+            "requested_limit": 5,
+        }
+        safe, notes = validate_plan(plan)
+        self.assertTrue(safe, f"'inbox' target must be valid. Notes: {notes}")
+
+    def test_unread_inbox_target_still_passes(self):
+        from inbox_scout.sort_scan_queue_runner import validate_plan
+        plan = {
+            "workflow_mode": "commands_planned",
+            "target": "unread_inbox",
+            "requested_limit": 5,
+        }
+        safe, notes = validate_plan(plan)
+        self.assertTrue(safe, f"'unread_inbox' target must still be valid. Notes: {notes}")
+
+    def test_unknown_target_blocked(self):
+        from inbox_scout.sort_scan_queue_runner import validate_plan
+        plan = {
+            "workflow_mode": "commands_planned",
+            "target": "all_mail",
+            "requested_limit": 5,
+        }
+        safe, _ = validate_plan(plan)
+        self.assertFalse(safe, "Unknown targets must be blocked")
 
 
 if __name__ == "__main__":

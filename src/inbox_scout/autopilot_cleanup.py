@@ -25,37 +25,185 @@ AUTOPILOT_EMERGENCY_CAP = 5000  # Runaway protection only — not a product limi
 QUEUE_PATH = PROJECT_ROOT / "data" / "review_queue" / "latest_queue.json"
 
 CATEGORY_TO_LABEL: dict[str, str] = {
+    # Receipts — order/payment confirmations, invoices, bills paid
     "receipt": "InboxScout/Receipts",
     "receipts": "InboxScout/Receipts",
+    "invoice": "InboxScout/Receipts",
+    "invoices": "InboxScout/Receipts",
+    "order confirmation": "InboxScout/Receipts",
+    "purchase confirmation": "InboxScout/Receipts",
+    "payment confirmation": "InboxScout/Receipts",
+    "payment receipt": "InboxScout/Receipts",
+    "transaction confirmation": "InboxScout/Receipts",
+    "donation receipt": "InboxScout/Receipts",
+    "billing receipt": "InboxScout/Receipts",
+    "bill paid": "InboxScout/Receipts",
+    "payment": "InboxScout/Receipts",
+    "bill": "InboxScout/Receipts",
+    "bills": "InboxScout/Receipts",
+    # Shopping-History — delivered orders, past purchases
+    "shopping": "InboxScout/Shopping-History",
+    "shopping history": "InboxScout/Shopping-History",
+    "order": "InboxScout/Shopping-History",
+    "order delivered": "InboxScout/Shopping-History",
+    "order history": "InboxScout/Shopping-History",
+    "delivered": "InboxScout/Shopping-History",
+    "package delivered": "InboxScout/Shopping-History",
+    "delivery confirmation": "InboxScout/Shopping-History",
+    "past purchase": "InboxScout/Shopping-History",
+    # Shipping-Returns — active tracking, returns, refunds
+    "shipment": "InboxScout/Shipping-Returns",
+    "shipping": "InboxScout/Shipping-Returns",
+    "tracking": "InboxScout/Shipping-Returns",
+    "return": "InboxScout/Shipping-Returns",
+    "returns": "InboxScout/Shipping-Returns",
+    "refund": "InboxScout/Shipping-Returns",
+    "refund pending": "InboxScout/Shipping-Returns",
+    "delivery exception": "InboxScout/Shipping-Returns",
+    "shipment delayed": "InboxScout/Shipping-Returns",
+    "return label": "InboxScout/Shipping-Returns",
+    "label created": "InboxScout/Shipping-Returns",
+    "dropoff": "InboxScout/Shipping-Returns",
+    # Security — login alerts, 2FA, resets
     "security": "InboxScout/Security",
     "security alert": "InboxScout/Security",
     "password": "InboxScout/Security",
     "password reset": "InboxScout/Security",
+    "login alert": "InboxScout/Security",
+    "sign in alert": "InboxScout/Security",
+    "verification": "InboxScout/Security",
+    "two factor": "InboxScout/Security",
+    "2fa": "InboxScout/Security",
+    "mfa": "InboxScout/Security",
+    "suspicious sign in": "InboxScout/Security",
+    "account recovery": "InboxScout/Security",
+    # Finance — banks, credit cards, statements, loans, investment
     "finance": "InboxScout/Finance",
     "financial": "InboxScout/Finance",
     "tax": "InboxScout/Finance",
-    "invoice": "InboxScout/Finance",
-    "payment": "InboxScout/Finance",
-    "bill": "InboxScout/Finance",
-    "bills": "InboxScout/Finance",
+    "taxes": "InboxScout/Finance",
     "insurance": "InboxScout/Finance",
+    "bank": "InboxScout/Finance",
+    "banking": "InboxScout/Finance",
+    "credit card": "InboxScout/Finance",
+    "statement": "InboxScout/Finance",
+    "loan": "InboxScout/Finance",
+    "investment": "InboxScout/Finance",
+    "paypal": "InboxScout/Finance",
+    "venmo": "InboxScout/Finance",
+    "cash app": "InboxScout/Finance",
+    # Accounts — profile/terms/privacy updates, non-security account notices
     "account": "InboxScout/Accounts",
     "accounts": "InboxScout/Accounts",
     "account access": "InboxScout/Accounts",
+    "account update": "InboxScout/Accounts",
+    "profile update": "InboxScout/Accounts",
+    "terms update": "InboxScout/Accounts",
+    "privacy update": "InboxScout/Accounts",
+    "username": "InboxScout/Accounts",
+    # Jobs — applications, recruiters, career
     "job": "InboxScout/Jobs",
     "jobs": "InboxScout/Jobs",
     "career": "InboxScout/Jobs",
-    "shopping": "InboxScout/Shopping-History",
-    "shopping history": "InboxScout/Shopping-History",
-    "order": "InboxScout/Shopping-History",
-    "shipment": "InboxScout/Shopping-History",
-    "shipping": "InboxScout/Shopping-History",
+    "interview": "InboxScout/Jobs",
+    "recruiter": "InboxScout/Jobs",
+    "hiring": "InboxScout/Jobs",
+    "job alert": "InboxScout/Jobs",
+    "linkedin job": "InboxScout/Jobs",
+    "application": "InboxScout/Jobs",
+    # Work-Business — client/business communications
+    "work": "InboxScout/Work-Business",
+    "business": "InboxScout/Work-Business",
+    "work business": "InboxScout/Work-Business",
+    "client": "InboxScout/Work-Business",
+    "professional": "InboxScout/Work-Business",
+    "partnership": "InboxScout/Work-Business",
+    "vendor": "InboxScout/Work-Business",
+    # Personal — friends, family, real human messages
+    "personal": "InboxScout/Personal",
+    "friend": "InboxScout/Personal",
+    "family": "InboxScout/Personal",
+    "human": "InboxScout/Personal",
+    # Medical — doctors, prescriptions, appointments
+    "medical": "InboxScout/Medical",
+    "health": "InboxScout/Medical",
+    "doctor": "InboxScout/Medical",
+    "hospital": "InboxScout/Medical",
+    "prescription": "InboxScout/Medical",
+    "appointment": "InboxScout/Medical",
+    "medical billing": "InboxScout/Medical",
+    # Legal-Tax — IRS, legal notices, government forms
+    "legal": "InboxScout/Legal-Tax",
+    "legal tax": "InboxScout/Legal-Tax",
+    "irs": "InboxScout/Legal-Tax",
+    "government": "InboxScout/Legal-Tax",
+    "court": "InboxScout/Legal-Tax",
+    "tax document": "InboxScout/Legal-Tax",
+    "legal notice": "InboxScout/Legal-Tax",
+    # Subscriptions — renewals, billing notices, trial ending
+    "subscription": "InboxScout/Subscriptions",
+    "subscriptions": "InboxScout/Subscriptions",
+    "renewal": "InboxScout/Subscriptions",
+    "renewals": "InboxScout/Subscriptions",
+    "trial ending": "InboxScout/Subscriptions",
+    "billing notice": "InboxScout/Subscriptions",
+    # Newsletters — digests, creator updates, Substack
+    "newsletter": "InboxScout/Newsletters",
+    "newsletters": "InboxScout/Newsletters",
+    "digest": "InboxScout/Newsletters",
+    "substack": "InboxScout/Newsletters",
+    # Promotions — coupons, sales, marketing, abandoned cart
+    "promotion": "InboxScout/Promotions",
+    "promotions": "InboxScout/Promotions",
+    "promo": "InboxScout/Promotions",
+    "coupon": "InboxScout/Promotions",
+    "sale": "InboxScout/Promotions",
+    "marketing": "InboxScout/Promotions",
+    "advertising": "InboxScout/Promotions",
+    "abandoned cart": "InboxScout/Promotions",
+    "brand offer": "InboxScout/Promotions",
+    # Social-Notifications — Reddit, Discord, YouTube, social platforms
+    "social": "InboxScout/Social-Notifications",
+    "social notifications": "InboxScout/Social-Notifications",
+    "reddit": "InboxScout/Social-Notifications",
+    "discord": "InboxScout/Social-Notifications",
+    "facebook": "InboxScout/Social-Notifications",
+    "instagram": "InboxScout/Social-Notifications",
+    "tiktok": "InboxScout/Social-Notifications",
+    "youtube": "InboxScout/Social-Notifications",
+    "twitter": "InboxScout/Social-Notifications",
+    "forum": "InboxScout/Social-Notifications",
+    "community": "InboxScout/Social-Notifications",
+    "notification": "InboxScout/Social-Notifications",
+    "notifications": "InboxScout/Social-Notifications",
+    # School-Learning — courses, certificates, training
+    "school": "InboxScout/School-Learning",
+    "learning": "InboxScout/School-Learning",
+    "course": "InboxScout/School-Learning",
+    "certificate": "InboxScout/School-Learning",
+    "training": "InboxScout/School-Learning",
+    "bootcamp": "InboxScout/School-Learning",
+    "education": "InboxScout/School-Learning",
+    "study": "InboxScout/School-Learning",
+    "lab": "InboxScout/School-Learning",
+    # AI-Dev-Tools — Claude, OpenAI, GitHub, dev platforms
+    "ai dev tools": "InboxScout/AI-Dev-Tools",
+    "developer": "InboxScout/AI-Dev-Tools",
+    "dev tools": "InboxScout/AI-Dev-Tools",
+    "github": "InboxScout/AI-Dev-Tools",
+    "claude": "InboxScout/AI-Dev-Tools",
+    "anthropic": "InboxScout/AI-Dev-Tools",
+    "openai": "InboxScout/AI-Dev-Tools",
+    "chatgpt": "InboxScout/AI-Dev-Tools",
+    "replit": "InboxScout/AI-Dev-Tools",
+    "cursor": "InboxScout/AI-Dev-Tools",
+    "ollama": "InboxScout/AI-Dev-Tools",
+    "vercel": "InboxScout/AI-Dev-Tools",
+    "render": "InboxScout/AI-Dev-Tools",
+    "lovable": "InboxScout/AI-Dev-Tools",
+    "openrouter": "InboxScout/AI-Dev-Tools",
+    "coding": "InboxScout/AI-Dev-Tools",
 }
-
-SAFE_ARCHIVE_AFTER_LABEL: frozenset[str] = frozenset({
-    "newsletter", "promotion", "promotions", "social", "ignore",
-    "notifications", "notification", "marketing", "advertising",
-})
 
 
 def _parse_limit(text: str) -> int:
@@ -271,8 +419,10 @@ def _process_non_trash_items(service: Any, items: list[dict], label_cache: dict)
         add_labels: list[str] = [label_id]
         remove_labels: list[str] = ["UNREAD"]
 
-        should_archive = not protected and risk <= 30 and cat in SAFE_ARCHIVE_AFTER_LABEL
-        if should_archive:
+        # Remove from INBOX for all successfully labeled non-protected items.
+        # Protected/manual-review items keep their INBOX placement for Ryan to handle.
+        should_remove_from_inbox = not protected
+        if should_remove_from_inbox:
             remove_labels.append("INBOX")
 
         if protected:
@@ -285,7 +435,7 @@ def _process_non_trash_items(service: Any, items: list[dict], label_cache: dict)
                 body={"addLabelIds": add_labels, "removeLabelIds": remove_labels},
             ).execute()
             labeled += 1
-            if should_archive:
+            if should_remove_from_inbox:
                 archived += 1
             marked_read += 1
         except Exception:
@@ -304,6 +454,14 @@ def _get_unread_inbox_count(service: Any) -> int:
     try:
         result = service.users().labels().get(userId="me", id="INBOX").execute()
         return int(result.get("messagesUnread", 0))
+    except Exception:
+        return 0
+
+
+def _get_total_inbox_count(service: Any) -> int:
+    try:
+        result = service.users().labels().get(userId="me", id="INBOX").execute()
+        return int(result.get("messagesTotal", 0))
     except Exception:
         return 0
 
@@ -329,6 +487,7 @@ def run_inbox_zero_autopilot(text: str) -> str:
         return f"Could not connect to Gmail.\n\n{e}\n\nGmail not touched."
 
     initial_unread = _get_unread_inbox_count(service)
+    initial_total = _get_total_inbox_count(service)
 
     label_cache: dict = {}
     cursor_path = PLANS_DIR / "latest_gmail_scan_cursor.json"
@@ -340,12 +499,13 @@ def run_inbox_zero_autopilot(text: str) -> str:
     # Loop until inbox is empty (scan returns 0) or emergency runaway cap is hit.
     while total_scanned < AUTOPILOT_EMERGENCY_CAP:
         # Never use continuation — always scan page 1 so that emails removed
-        # from INBOX/UNREAD by prior actions don't cause stale page-token skips.
+        # from INBOX by prior actions don't cause stale page-token skips.
         plan = build_scan_queue_plan(f"sort {AUTOPILOT_MAX_LIMIT} emails")
         if plan.workflow_mode != "commands_planned":
             stopped_early = True
             break
         plan.requested_limit = min(plan.requested_limit or AUTOPILOT_MAX_LIMIT, AUTOPILOT_MAX_LIMIT)
+        plan.target = "inbox"  # scan all INBOX emails, not just unread
         save_plan(plan)
 
         try:
@@ -390,11 +550,12 @@ def run_inbox_zero_autopilot(text: str) -> str:
     lines = [
         "Inbox Zero complete." if complete else "Inbox Zero stopped.",
         "",
+        f"Starting Inbox total: {initial_total}",
         f"Starting unread: {initial_unread}",
         f"Scanned: {total_scanned}",
         f"Moved to Trash: {total_trashed}",
         f"Labeled (InboxScout): {total_labeled}",
-        f"Archived: {total_archived}",
+        f"Archived (removed from Inbox): {total_archived}",
         f"Marked read: {total_marked_read}",
         f"Left in inbox (labeled, protected): {total_protected}",
     ]

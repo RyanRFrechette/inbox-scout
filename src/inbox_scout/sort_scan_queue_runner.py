@@ -79,7 +79,7 @@ def validate_plan(plan: dict[str, Any]) -> tuple[bool, list[str]]:
         notes.append(f"Blocked: workflow_mode is {plan.get('workflow_mode')}.")
         return False, notes
 
-    if plan.get("target") != "unread_inbox":
+    if plan.get("target") not in ("unread_inbox", "inbox"):
         notes.append(f"Blocked: unsupported target {plan.get('target')}.")
         return False, notes
 
@@ -192,10 +192,13 @@ def main() -> None:
         str(limit),
         "--page-size",
         str(page_size),
-        "--unread-only",
         "--export",
         "both",
     ]
+
+    # Only restrict to unread for standard sorts; sort-all scans the whole inbox.
+    if plan.get("target", "unread_inbox") != "inbox":
+        report_args.append("--unread-only")
 
     if is_continuation:
         cursor = load_cursor()
