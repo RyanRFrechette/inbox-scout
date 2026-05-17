@@ -62,9 +62,9 @@ class TestParseDrilldown(unittest.TestCase):
         self.assertEqual(label, "InboxScout/Finance")
         self.assertEqual(days, 0)
 
-    def test_days_clamped_to_90(self):
+    def test_days_over_cap_returned_raw(self):
         from inbox_scout.folder_explorer import parse_days
-        self.assertEqual(parse_days("last 200 days"), 90)
+        self.assertEqual(parse_days("last 200 days"), 200)
 
     def test_this_month_returns_30(self):
         from inbox_scout.folder_explorer import parse_days
@@ -241,6 +241,39 @@ class TestBuildDrilldown(unittest.TestCase):
         # Summarize header style differs from list style
         self.assertIn("Promotions", result)
         self.assertIn("showing 1", result)
+
+    def test_cap_disclosed_when_exceeded(self):
+        from inbox_scout.folder_explorer import build_drilldown_message
+        msgs = [{"id": "m1"}]
+        hdrs = {"m1": [
+            {"name": "From", "value": "promo@example.com"},
+            {"name": "Subject", "value": "Big sale"},
+            {"name": "Date", "value": "Mon, 1 May 2026"},
+        ]}
+        svc = self._make_drilldown_service(msgs, hdrs)
+
+        with patch("inbox_scout.folder_explorer._get_service", return_value=svc):
+            result = build_drilldown_message("InboxScout/Promotions", 365)
+
+        self.assertIn("365", result)
+        self.assertIn("90", result)
+        self.assertIn("capped", result.lower())
+
+    def test_no_cap_notice_when_under_cap(self):
+        from inbox_scout.folder_explorer import build_drilldown_message
+        msgs = [{"id": "m1"}]
+        hdrs = {"m1": [
+            {"name": "From", "value": "promo@example.com"},
+            {"name": "Subject", "value": "Big sale"},
+            {"name": "Date", "value": "Mon, 1 May 2026"},
+        ]}
+        svc = self._make_drilldown_service(msgs, hdrs)
+
+        with patch("inbox_scout.folder_explorer._get_service", return_value=svc):
+            result = build_drilldown_message("InboxScout/Promotions", 30)
+
+        self.assertNotIn("capped", result.lower())
+        self.assertNotIn("You asked for", result)
 
 
 # ---------------------------------------------------------------------------

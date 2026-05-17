@@ -11,6 +11,7 @@ from typing import Optional
 
 INBOX_SCOUT_PREFIX = "InboxScout/"
 DRILLDOWN_LIMIT = 15
+_DAY_CAP = 90
 
 # Short alias (lowercase) → full Gmail label name
 LABEL_ALIASES: dict[str, str] = {
@@ -69,11 +70,11 @@ def resolve_label(text: str) -> Optional[str]:
 
 
 def parse_days(text: str) -> int:
-    """Return day count from 'last N days', 'this week', 'this month'. 0 = not found."""
+    """Return day count from 'last N days', 'this week', 'this month'. 0 = not found. No cap applied."""
     t = text.lower()
     m = _TIME_RE.search(t)
     if m:
-        return max(1, min(90, int(m.group(1))))
+        return max(1, int(m.group(1)))
     if "this week" in t or "last week" in t:
         return 7
     if "this month" in t or "last month" in t:
@@ -145,6 +146,13 @@ def build_folder_counts_message() -> str:
 
 def build_drilldown_message(label_name: str, days: int, summarize: bool = False) -> str:
     short = label_name[len(INBOX_SCOUT_PREFIX):]
+    requested_days = days
+    if days > 0:
+        days = min(days, _DAY_CAP)
+    cap_note = (
+        f"\n\n(You asked for {requested_days} days, so I capped this at {_DAY_CAP} days for safety.)"
+        if requested_days > _DAY_CAP else ""
+    )
     human_range = f" from the last {days} day{'s' if days != 1 else ''}" if days else ""
 
     date_filter = ""
@@ -168,7 +176,7 @@ def build_drilldown_message(label_name: str, days: int, summarize: bool = False)
     estimate = resp.get("resultSizeEstimate", 0)
 
     if not messages:
-        return f"Nothing in {short}{human_range}."
+        return f"Nothing in {short}{human_range}.{cap_note}"
 
     lines: list[str] = []
     for msg in messages:
@@ -194,4 +202,4 @@ def build_drilldown_message(label_name: str, days: int, summarize: bool = False)
         header = f"Emails in {short}{human_range} ({estimate} total, showing {shown}):\n\n"
 
     footer = "\n\nRead-only. Nothing was changed."
-    return header + "\n\n".join(lines) + footer
+    return header + "\n\n".join(lines) + cap_note + footer
