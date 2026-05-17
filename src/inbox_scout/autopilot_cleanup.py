@@ -193,6 +193,8 @@ CATEGORY_TO_LABEL: dict[str, str] = {
     "github": "InboxScout/AI-Dev-Tools",
     "claude": "InboxScout/AI-Dev-Tools",
     "anthropic": "InboxScout/AI-Dev-Tools",
+    "anthropic receipt": "InboxScout/AI-Dev-Tools",
+    "anthropic invoice": "InboxScout/AI-Dev-Tools",
     "openai": "InboxScout/AI-Dev-Tools",
     "chatgpt": "InboxScout/AI-Dev-Tools",
     "replit": "InboxScout/AI-Dev-Tools",
@@ -203,6 +205,35 @@ CATEGORY_TO_LABEL: dict[str, str] = {
     "lovable": "InboxScout/AI-Dev-Tools",
     "openrouter": "InboxScout/AI-Dev-Tools",
     "coding": "InboxScout/AI-Dev-Tools",
+    # Amazon / retail ordering — AI may return these exact category strings
+    "amazon order": "InboxScout/Shopping-History",
+    "amazon shipped": "InboxScout/Shipping-Returns",
+    "amazon delivered": "InboxScout/Shopping-History",
+    "amazon tracking": "InboxScout/Shipping-Returns",
+    "order notification": "InboxScout/Shopping-History",
+    "order update": "InboxScout/Shopping-History",
+    "order status": "InboxScout/Shopping-History",
+    "order placed": "InboxScout/Receipts",
+    "order shipped": "InboxScout/Shipping-Returns",
+    "shipping update": "InboxScout/Shipping-Returns",
+    "shipping confirmation": "InboxScout/Shipping-Returns",
+    "delivery notification": "InboxScout/Shopping-History",
+    "delivery update": "InboxScout/Shopping-History",
+    "package tracking": "InboxScout/Shipping-Returns",
+    "tracking update": "InboxScout/Shipping-Returns",
+    # USPS / carrier receipts
+    "usps": "InboxScout/Shipping-Returns",
+    "click-n-ship": "InboxScout/Receipts",
+    "click n ship": "InboxScout/Receipts",
+    "shipping label": "InboxScout/Shipping-Returns",
+    # Finance — more specific AI-returned strings for true Finance
+    "paypal statement": "InboxScout/Finance",
+    "paypal monthly": "InboxScout/Finance",
+    "merrill": "InboxScout/Finance",
+    "merrill lynch": "InboxScout/Finance",
+    "brokerage statement": "InboxScout/Finance",
+    "investment statement": "InboxScout/Finance",
+    "account statement": "InboxScout/Finance",
 }
 
 
@@ -342,8 +373,56 @@ def _beep_once() -> None:
         pass
 
 
+# Signals that confirm true Finance — block any Finance → other-folder demotion.
+_FINANCE_KEEP_SIGNALS: frozenset[str] = frozenset({
+    "statement", "bank statement", "credit card", "investment", "irs", "tax form",
+    "w-2", "1099", "401k", "payroll", "merrill", "fidelity", "schwab", "vanguard",
+    "brokerage", "mortgage", "insurance premium",
+})
+
+
+def _override_finance_label(item: dict) -> str | None:
+    """Return a better label when Finance is over-assigned due to broad keywords.
+
+    Returns None to keep Finance when a true Finance signal is found in
+    subject/snippet, or when the sender is not a known retail/AI sender.
+    """
+    sender = (item.get("from") or "").lower()
+    subject = (item.get("subject") or item.get("snippet") or "").lower()
+
+    # Never demote when a true Finance signal is present
+    if any(sig in subject for sig in _FINANCE_KEEP_SIGNALS):
+        return None
+
+    # Amazon → route by subject signals
+    if "amazon" in sender:
+        if any(s in subject for s in ("shipped", "shipment", "tracking", "on its way", "out for delivery")):
+            return "InboxScout/Shipping-Returns"
+        return "InboxScout/Receipts"
+
+    # Anthropic → AI-Dev-Tools (receipts, welcome, plan emails)
+    if "anthropic" in sender:
+        return "InboxScout/AI-Dev-Tools"
+
+    # USPS → Click-N-Ship payment → Receipts; other USPS → Shipping-Returns
+    if "usps" in sender:
+        if "click-n-ship" in subject or "click n ship" in subject or "payment" in subject:
+            return "InboxScout/Receipts"
+        return "InboxScout/Shipping-Returns"
+
+    return None
+
+
 def _pick_inboxscout_label(item: dict) -> str:
     cat = _norm_cat(item.get("category") or item.get("final_category") or "")
+
+    # Finance override: use sender/subject to route to a more precise folder
+    # when the Finance category was triggered by overly broad rule keywords.
+    if cat == "finance":
+        override = _override_finance_label(item)
+        if override:
+            return override
+
     if cat in CATEGORY_TO_LABEL:
         return CATEGORY_TO_LABEL[cat]
     for part in cat.split("/"):
