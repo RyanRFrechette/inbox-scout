@@ -26,6 +26,7 @@ from inbox_scout.model_router import get_provider, set_provider, model_status_me
 from inbox_scout.mark_read_runner import build_mark_read_plan_message, build_mark_read_runner_message
 from inbox_scout.queue_decision import build_set_decision_message
 from inbox_scout.autopilot_cleanup import run_autopilot_cleanup, run_inbox_zero_autopilot
+from inbox_scout.natural_intent_llm import parse_intent, CONFIDENCE_THRESHOLD
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -257,6 +258,34 @@ _INBOX_ZERO_PHRASES = [
 
 def _is_inbox_zero(msg: str) -> bool:
     return any(phrase in msg for phrase in _INBOX_ZERO_PHRASES)
+
+
+def _llm_fallback(text: str) -> str:
+    """LLM intent parser — runs only when all deterministic routes fail."""
+    parsed = parse_intent(text)
+    intent = parsed.get("intent", "unknown")
+    confidence = parsed.get("confidence", 0.0)
+    clarifying = parsed.get("clarifying_question", "").strip()
+
+    if confidence < CONFIDENCE_THRESHOLD or intent == "unknown":
+        if clarifying:
+            return clarifying
+        return "Not sure what you mean.\n\n" + help_message()
+
+    if intent == "inbox_count":
+        return build_inbox_count_message()
+    if intent == "inbox_zero_autopilot":
+        return run_inbox_zero_autopilot(text)
+    if intent == "queue_summary":
+        return queue_summary()
+    if intent == "next_review_item":
+        return next_review_item()
+    if intent == "model_status":
+        return model_status_message()
+    if intent == "help":
+        return help_message()
+
+    return "Not sure what you mean.\n\n" + help_message()
 
 
 def handle_natural_message(text: str) -> str:
@@ -525,7 +554,7 @@ def handle_natural_message(text: str) -> str:
     ]):
         return sort_plan_message(text)
 
-    return "Not sure what you mean.\n\n" + help_message()
+    return _llm_fallback(text)
 
 
 def main() -> None:
