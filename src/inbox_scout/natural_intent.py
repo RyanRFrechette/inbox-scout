@@ -37,6 +37,29 @@ from inbox_scout.folder_explorer import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 LATEST_QUEUE = PROJECT_ROOT / "data" / "review_queue" / "latest_queue.json"
+_LLM_PENDING_PATH = PROJECT_ROOT / "config" / "llm_pending_action.json"
+
+
+def _save_pending_autopilot(original_text: str) -> None:
+    _LLM_PENDING_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _LLM_PENDING_PATH.write_text(
+        json.dumps({"pending": "inbox_zero_autopilot", "original_text": original_text}),
+        encoding="utf-8",
+    )
+
+
+def _get_pending_action() -> dict:
+    if not _LLM_PENDING_PATH.exists():
+        return {}
+    try:
+        return json.loads(_LLM_PENDING_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _clear_pending_action() -> None:
+    if _LLM_PENDING_PATH.exists():
+        _LLM_PENDING_PATH.unlink()
 
 
 def clean(value: Any) -> str:
@@ -281,7 +304,12 @@ def _llm_fallback(text: str) -> str:
     if intent == "inbox_count":
         return build_inbox_count_message()
     if intent == "inbox_zero_autopilot":
-        return run_inbox_zero_autopilot(text)
+        _save_pending_autopilot(text)
+        return (
+            "I can start safely working through your inbox — "
+            "this can move, label, and trash safe emails.\n\n"
+            "Reply CONFIRM INBOX AUTOPILOT to start, or 'cancel autopilot' to cancel."
+        )
     if intent == "queue_summary":
         return queue_summary()
     if intent == "next_review_item":
@@ -296,6 +324,20 @@ def _llm_fallback(text: str) -> str:
 
 def handle_natural_message(text: str) -> str:
     msg = text.lower().strip()
+
+    # LLM autopilot confirmation gate — must run before all other routing
+    if msg == "confirm inbox autopilot":
+        pending = _get_pending_action()
+        if pending.get("pending") == "inbox_zero_autopilot":
+            _clear_pending_action()
+            return run_inbox_zero_autopilot(pending.get("original_text", text))
+        return "No inbox autopilot is pending. Say something like 'handle my inbox' to start."
+
+    if any(p in msg for p in ("cancel autopilot", "cancel inbox autopilot")):
+        if _get_pending_action().get("pending"):
+            _clear_pending_action()
+            return "Cancelled. Gmail not touched."
+        return "Nothing pending to cancel."
 
     model_response = _handle_model_command(msg)
     if model_response is not None:
