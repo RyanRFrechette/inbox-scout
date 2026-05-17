@@ -21,15 +21,18 @@ def get_inbox_counts() -> dict:
 
 def build_inbox_count_message() -> str:
     counts = get_inbox_counts()
+    total = counts["total"]
+    unread = counts["unread"]
+    t_unread = counts["threads_unread"]
 
-    return (
-        "Here is your Gmail Inbox count:\n\n"
-        f"- Total inbox emails: {counts['total']}\n"
-        f"- Unread inbox emails: {counts['unread']}\n"
-        f"- Total inbox threads: {counts['threads_total']}\n"
-        f"- Unread inbox threads: {counts['threads_unread']}\n\n"
-        "I only checked the count. I did not touch Gmail."
-    )
+    if unread == 0:
+        summary = f"Your inbox is clean — {total} total email{'s' if total != 1 else ''}, none unread."
+    elif unread >= total * 0.8:
+        summary = f"Your inbox is pretty full — {unread} unread out of {total} total ({t_unread} unread threads)."
+    else:
+        summary = f"Your inbox has {unread} unread out of {total} total ({t_unread} unread threads)."
+
+    return summary + "\n\nRead-only. Gmail not touched."
 
 
 def main() -> None:

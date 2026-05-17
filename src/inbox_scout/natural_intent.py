@@ -27,6 +27,12 @@ from inbox_scout.mark_read_runner import build_mark_read_plan_message, build_mar
 from inbox_scout.queue_decision import build_set_decision_message
 from inbox_scout.autopilot_cleanup import run_autopilot_cleanup, run_inbox_zero_autopilot
 from inbox_scout.natural_intent_llm import parse_intent, CONFIDENCE_THRESHOLD
+from inbox_scout.folder_explorer import (
+    build_folder_counts_message,
+    build_drilldown_message,
+    parse_drilldown,
+    is_drilldown_phrase,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -553,6 +559,32 @@ def handle_natural_message(text: str) -> str:
         "junk to trash",
     ]):
         return sort_plan_message(text)
+
+    # --- Read-only folder/label explorer ---
+    if any(phrase in msg for phrase in [
+        "show my folders",
+        "show my archives",
+        "what folders do i have",
+        "what is in each folder",
+        "show inboxscout folder counts",
+        "give me a folder breakdown",
+        "folder breakdown",
+        "folder counts",
+        "my folders",
+        "label counts",
+        "show labels",
+        "inboxscout folders",
+    ]):
+        return build_folder_counts_message()
+
+    if is_drilldown_phrase(msg):
+        label, days, summarize = parse_drilldown(msg)
+        if label is None:
+            return (
+                "Which InboxScout folder? Try: Receipts, Finance, Promotions, "
+                "Newsletters, Security, Jobs, Personal, Medical, Legal-Tax, Shopping-History."
+            )
+        return build_drilldown_message(label, days or 7, summarize=summarize)
 
     return _llm_fallback(text)
 
