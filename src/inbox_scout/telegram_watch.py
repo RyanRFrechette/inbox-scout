@@ -4,6 +4,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -12,7 +13,7 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 
-from inbox_scout.env_loader import load_env, env_status
+from inbox_scout.env_loader import load_env, env_status, validate_telegram_env
 from inbox_scout.telegram_listener import run_once
 
 
@@ -21,16 +22,28 @@ LOG_DIR = PROJECT_ROOT / "data" / "logs"
 LOG_PATH = LOG_DIR / "telegram_watch.log"
 LOCK_PORT = 47631
 
+# Matches Telegram bot tokens (digits:alphanumeric, 35+ chars after colon)
+_TOKEN_RE = re.compile(r"\d{6,12}:[A-Za-z0-9_\-]{35,}")
+
+
+def _redact(text: str) -> str:
+    """Replace any Telegram bot token in text with [BOT_TOKEN]."""
+    return _TOKEN_RE.sub("[BOT_TOKEN]", text)
+
 
 def log(message: str) -> None:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with LOG_PATH.open("a", encoding="utf-8") as f:
-        f.write(f"[{stamp}] {message}\n")
+        f.write(f"[{stamp}] {_redact(message)}\n")
+
+
+_PYTHON_EXE_NAMES = {"python.exe", "pythonw.exe"}
+_SHELL_EXE_NAMES = {"powershell.exe", "pwsh.exe", "cmd.exe", "explorer.exe", "wt.exe", "windowsterminal.exe"}
 
 
 def kill_stale_watchers() -> None:
-    """Kill any telegram_watch processes not running from the project venv Python."""
+    """Kill stale Python telegram_watch processes. Never kills shells or parent launchers."""
     our_pid = os.getpid()
     venv_python = str((PROJECT_ROOT / ".venv" / "Scripts" / "python.exe").resolve()).lower()
     killed_any = False
@@ -62,13 +75,19 @@ def kill_stale_watchers() -> None:
             exe = str(proc.get("ExecutablePath") or "").lower()
             if pid is None or pid == our_pid:
                 continue
+
+            exe_name = Path(exe).name if exe else ""
+            if exe_name not in _PYTHON_EXE_NAMES:
+                log(
+                    f"Skipping non-Python process with telegram_watch in cmdline: "
+                    f"PID={pid} exe={exe_name or '(unknown)'}"
+                )
+                continue
+
             if exe == venv_python:
                 log(f"Duplicate venv watcher detected: PID={pid} — port lock will handle it.")
             else:
-                log(
-                    f"Killing stale/non-venv watcher: PID={pid} "
-                    f"exe={proc.get('ExecutablePath')}"
-                )
+                log(f"Killing stale/non-venv Python watcher: PID={pid} exe={exe_name}")
                 subprocess.run(
                     [
                         "powershell", "-NoProfile", "-NonInteractive", "-Command",
@@ -111,6 +130,14 @@ def acquire_single_instance_lock() -> socket.socket:
 def main() -> None:
     load_env()
     log(f"Env loaded. {env_status()}")
+
+    issues = validate_telegram_env()
+    if issues:
+        for issue in issues:
+            log(f"Startup config error: {issue}")
+            print(f"ERROR: {issue}")
+        print("Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env then restart.")
+        return
 
     kill_stale_watchers()
 

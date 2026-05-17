@@ -29,3 +29,24 @@ def env_status() -> str:
     if openrouter_key_present():
         return "OPENROUTER_API_KEY: set"
     return "OPENROUTER_API_KEY: not set"
+
+
+def telegram_token_valid() -> bool:
+    """Return True if TELEGRAM_BOT_TOKEN is set, non-empty, and contains ':'. Never reveals value."""
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    return bool(token) and ":" in token
+
+
+def telegram_chat_id_valid() -> bool:
+    """Return True if TELEGRAM_CHAT_ID is set and non-empty. Never reveals value."""
+    return bool(os.environ.get("TELEGRAM_CHAT_ID", "").strip())
+
+
+def validate_telegram_env() -> list[str]:
+    """Return list of config issues. Empty list means config is valid. Never reveals values."""
+    issues: list[str] = []
+    if not telegram_token_valid():
+        issues.append("TELEGRAM_BOT_TOKEN missing or invalid (must be non-empty and contain ':')")
+    if not telegram_chat_id_valid():
+        issues.append("TELEGRAM_CHAT_ID missing or blank")
+    return issues
