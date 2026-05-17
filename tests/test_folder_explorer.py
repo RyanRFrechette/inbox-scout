@@ -223,7 +223,8 @@ class TestBuildDrilldown(unittest.TestCase):
         with patch("inbox_scout.folder_explorer._get_service", return_value=svc):
             result = build_drilldown_message("InboxScout/Finance", 14)
 
-        self.assertIn("Nothing in Finance", result)
+        self.assertIn("didn't find anything in Finance", result)
+        self.assertIn("Read-only", result)
 
     def test_summarize_flag_changes_header(self):
         from inbox_scout.folder_explorer import build_drilldown_message
@@ -258,6 +259,63 @@ class TestBuildDrilldown(unittest.TestCase):
         self.assertIn("365", result)
         self.assertIn("90", result)
         self.assertIn("capped", result.lower())
+
+    def test_drilldown_includes_natural_summary(self):
+        from inbox_scout.folder_explorer import build_drilldown_message
+        msgs = [{"id": "m1"}, {"id": "m2"}]
+        hdrs = {
+            "m1": [{"name": "From", "value": "bank@bank.com"}, {"name": "Subject", "value": "Statement ready"}, {"name": "Date", "value": "Mon, 12 May 2026"}],
+            "m2": [{"name": "From", "value": "bank2@bank.com"}, {"name": "Subject", "value": "Transfer confirmed"}, {"name": "Date", "value": "Tue, 13 May 2026"}],
+        }
+        svc = self._make_drilldown_service(msgs, hdrs)
+        with patch("inbox_scout.folder_explorer._get_service", return_value=svc):
+            result = build_drilldown_message("InboxScout/Finance", 7)
+        self.assertIn("Finance has", result)
+        self.assertIn("showing", result.lower())
+        summary_pos = result.find("Finance has")
+        bullet_pos = result.find("•")
+        self.assertGreater(bullet_pos, summary_pos)
+
+    def test_empty_result_is_natural(self):
+        from inbox_scout.folder_explorer import build_drilldown_message
+        svc = MagicMock()
+        svc.users().messages().list(
+            userId="me", q=unittest.mock.ANY, maxResults=unittest.mock.ANY
+        ).execute.return_value = {"messages": [], "resultSizeEstimate": 0}
+        with patch("inbox_scout.folder_explorer._get_service", return_value=svc):
+            result = build_drilldown_message("InboxScout/Promotions", 14)
+        self.assertIn("didn't find anything", result.lower())
+        self.assertIn("Promotions", result)
+
+    def test_shopping_heavy_folder_includes_hint(self):
+        from inbox_scout.folder_explorer import build_drilldown_message
+        msgs = [{"id": f"m{i}"} for i in range(5)]
+        hdrs = {
+            f"m{i}": [
+                {"name": "From", "value": "amazon@amazon.com"},
+                {"name": "Subject", "value": f"Your Amazon order {i} has shipped"},
+                {"name": "Date", "value": "Mon, 12 May 2026"},
+            ]
+            for i in range(5)
+        }
+        svc = self._make_drilldown_service(msgs, hdrs)
+        with patch("inbox_scout.folder_explorer._get_service", return_value=svc):
+            result = build_drilldown_message("InboxScout/Finance", 30)
+        self.assertIn("shopping", result.lower())
+        self.assertIn("Finance", result)
+
+    def test_read_only_wording_remains(self):
+        from inbox_scout.folder_explorer import build_drilldown_message
+        msgs = [{"id": "m1"}]
+        hdrs = {"m1": [
+            {"name": "From", "value": "x@x.com"},
+            {"name": "Subject", "value": "Test"},
+            {"name": "Date", "value": "Mon, 12 May 2026"},
+        ]}
+        svc = self._make_drilldown_service(msgs, hdrs)
+        with patch("inbox_scout.folder_explorer._get_service", return_value=svc):
+            result = build_drilldown_message("InboxScout/Finance", 7)
+        self.assertIn("Read-only. Nothing was changed.", result)
 
     def test_no_cap_notice_when_under_cap(self):
         from inbox_scout.folder_explorer import build_drilldown_message

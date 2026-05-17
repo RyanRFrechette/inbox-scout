@@ -54,6 +54,46 @@ _SORTED_ALIASES = sorted(LABEL_ALIASES, key=len, reverse=True)
 
 _TIME_RE = re.compile(r"last\s+(\d+)\s+days?")
 
+_SHOPPING_TERMS = frozenset({
+    "amazon", "order", "shipment", "shipped", "delivery", "receipt",
+    "invoice", "tracking", "package", "purchase", "confirmation",
+    "ups", "fedex", "usps", "dhl", "walmart", "target", "ebay",
+    "shop", "store",
+})
+
+_FINANCE_LIKE = frozenset({"finance"})
+
+
+def _has_shopping_signal(lines: list[str]) -> bool:
+    """True when at least half the visible emails look like shopping/shipping/receipts."""
+    if not lines:
+        return False
+    hits = sum(1 for line in lines if any(term in line.lower() for term in _SHOPPING_TERMS))
+    return hits >= max(2, len(lines) // 2)
+
+
+def _build_intro(short: str, estimate: int, shown: int, lines: list[str]) -> str:
+    """One-sentence natural summary inserted before the email list."""
+    crowded = estimate > shown
+    shopping = _has_shopping_signal(lines)
+    is_finance_like = short.lower() in _FINANCE_LIKE
+
+    parts: list[str] = []
+    if crowded:
+        parts.append(f"{short} is pretty crowded.")
+    else:
+        suffix = "email" if estimate == 1 else "emails"
+        parts.append(f"{short} has {estimate} {suffix}.")
+
+    if shopping and is_finance_like:
+        parts.append(
+            "A lot of this looks like shopping receipts and shipment/order emails, "
+            "not true banking."
+        )
+
+    parts.append(f"I'm showing the newest {shown}." if crowded else "I'm showing all of them.")
+    return " ".join(parts)
+
 
 def _get_service():
     from inbox_scout.gmail_auth import get_gmail_service
@@ -176,7 +216,8 @@ def build_drilldown_message(label_name: str, days: int, summarize: bool = False)
     estimate = resp.get("resultSizeEstimate", 0)
 
     if not messages:
-        return f"Nothing in {short}{human_range}.{cap_note}"
+        range_note = f" in the last {days} day{'s' if days != 1 else ''}" if days else ""
+        return f"I didn't find anything in {short}{range_note}.{cap_note}\n\nRead-only. Nothing was changed."
 
     lines: list[str] = []
     for msg in messages:
@@ -196,10 +237,11 @@ def build_drilldown_message(label_name: str, days: int, summarize: bool = False)
             lines.append("• (could not load this email)")
 
     shown = len(lines)
+    intro = _build_intro(short, estimate, shown, lines)
     if summarize:
         header = f"{short}{human_range} — {estimate} total, showing {shown}:\n\n"
     else:
         header = f"Emails in {short}{human_range} ({estimate} total, showing {shown}):\n\n"
 
     footer = "\n\nRead-only. Nothing was changed."
-    return header + "\n\n".join(lines) + cap_note + footer
+    return intro + "\n\n" + header + "\n\n".join(lines) + cap_note + footer
