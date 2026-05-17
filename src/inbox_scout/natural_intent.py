@@ -84,44 +84,41 @@ def sort_plan_message(text: str, continuation: bool = False, cleanup: bool = Fal
     if plan.sort_all:
         if plan.is_continuation:
             return (
-                "I will scan the next 5 unread emails from where the last batch left off.\n"
-                "Say continue sorting again after this batch to advance.\n\n"
+                "Picking up where we left off — scanning the next 5 unread emails.\n\n"
                 f"{_prov_line}\n"
-                "Read-only. No Gmail changes.\n\n"
-                "Reply yes to scan this batch, or cancel to stop."
+                "Nothing in Gmail changes until you confirm.\n\n"
+                "Say yes to scan this batch, or cancel."
             )
         if plan.cleanup_mode and "test" in text.lower():
             return (
-                f"I will scan only up to {plan.requested_limit} unread inbox emails in read-only batches of 5.\n"
-                "After scanning, I will build a local cleanup plan.\n"
-                "I will not move anything until you review the candidates and say move trash.\n\n"
+                f"I'll scan up to {plan.requested_limit} unread emails and build a cleanup plan.\n"
+                "Nothing moves until you review the candidates and say move trash.\n\n"
                 f"{_prov_line}\n"
-                "Read-only. No Gmail changes.\n\n"
-                "Reply yes to scan this test batch, or cancel to stop."
+                "Nothing in Gmail changes yet.\n\n"
+                "Say yes to start, or cancel."
             )
         if plan.cleanup_mode:
             return (
-                "I will scan your entire unread inbox in read-only batches of 5.\n"
-                "This may take a while depending on how many unread emails you have.\n"
-                "After scanning, I will build a local cleanup plan.\n"
-                "I will not move anything until you say move trash.\n\n"
+                "I'll scan your whole unread inbox and put together a cleanup plan.\n"
+                "Depending on how many emails you have, this might take a few passes.\n"
+                "Nothing moves until you say move trash.\n\n"
                 f"{_prov_line}\n"
-                "Read-only. No Gmail changes.\n\n"
-                "Reply yes to scan, or cancel to stop."
+                "Nothing in Gmail changes yet.\n\n"
+                "Say yes to start, or cancel."
             )
         return (
-            "I will scan the first 5 unread emails and build a review queue.\n"
-            "Say continue sorting after each batch to advance.\n\n"
+            "I'll scan the first 5 unread emails and build a review queue.\n"
+            "Say continue sorting after each batch to keep going.\n\n"
             f"{_prov_line}\n"
-            "Read-only. No Gmail changes.\n\n"
-            "Reply yes to scan this batch, or cancel to stop."
+            "Nothing in Gmail changes yet.\n\n"
+            "Say yes to scan, or cancel."
         )
 
     return (
-        f"I will scan {plan.requested_limit} unread emails and build a review queue.\n\n"
+        f"I'll scan {plan.requested_limit} unread emails and build a review queue.\n\n"
         f"{_prov_line}\n"
-        "Read-only. No Gmail changes.\n\n"
-        "Reply yes to scan, or cancel to stop."
+        "Nothing in Gmail changes yet.\n\n"
+        "Say yes to scan, or cancel."
     )
 
 
