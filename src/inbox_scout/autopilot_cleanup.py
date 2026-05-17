@@ -551,17 +551,17 @@ def run_inbox_zero_autopilot(text: str) -> str:
         f"Starting unread: {initial_unread}",
         f"Scanned: {total_scanned}",
         f"Moved to Trash: {total_trashed}",
-        f"Labeled (InboxScout): {total_labeled}",
-        f"Archived (removed from Inbox): {total_archived}",
+        f"Labeled: {total_labeled}",
+        f"Archived: {total_archived}",
         f"Marked read: {total_marked_read}",
-        f"Flagged for manual review: {total_protected}",
+        f"Flagged for your review: {total_protected}",
     ]
     if total_errors:
-        lines.append(f"Errors/skipped: {total_errors}")
+        lines.append(f"Couldn't process: {total_errors}")
     if stopped_early and not emergency_cap_hit:
-        lines.append("Stopped due to error — run sort all again to continue.")
+        lines.append("Hit an error midway — run sort all again to continue.")
     if emergency_cap_hit:
-        lines.extend(["", f"Emergency runaway cap hit ({AUTOPILOT_EMERGENCY_CAP}). Run sort all again."])
-    lines.extend(["", "Nothing permanently deleted. All recoverable from Trash or Gmail."])
+        lines.extend(["", f"Hit the safety limit ({AUTOPILOT_EMERGENCY_CAP} emails) — run sort all again to continue."])
+    lines.extend(["", "Nothing permanently deleted — all recoverable from Gmail."])
     _beep_once()
     return "\n".join(lines)
