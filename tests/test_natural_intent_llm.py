@@ -101,7 +101,8 @@ class TestLLMFallbackRouting(unittest.TestCase):
              patch("inbox_scout.natural_intent.build_inbox_count_message", return_value="COUNT_OK"), \
              patch("inbox_scout.natural_intent.queue_summary", return_value="QUEUE_OK"), \
              patch("inbox_scout.natural_intent.next_review_item", return_value="NEXT_OK"), \
-             patch("inbox_scout.natural_intent.model_status_message", return_value="MODEL_OK"):
+             patch("inbox_scout.natural_intent.model_status_message", return_value="MODEL_OK"), \
+             patch("inbox_scout.natural_intent._save_pending_autopilot"):
             return ni._llm_fallback(original)
 
     def test_inbox_zero_autopilot_routes_to_autopilot(self):
@@ -110,7 +111,7 @@ class TestLLMFallbackRouting(unittest.TestCase):
             "requires_write": True, "clarifying_question": "",
         }
         result = self._call_fallback(parsed)
-        self.assertEqual(result, "AUTOPILOT_OK")
+        self.assertIn("CONFIRM INBOX AUTOPILOT", result)
 
     def test_inbox_count_routes_correctly(self):
         parsed = {

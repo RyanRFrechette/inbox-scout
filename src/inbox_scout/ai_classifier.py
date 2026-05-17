@@ -57,6 +57,7 @@ _ALWAYS_PROTECTED_RULE_CATEGORIES = frozenset({
     "personal",
     "important",
     "needs reply",
+    "manual review",
 })
 
 
