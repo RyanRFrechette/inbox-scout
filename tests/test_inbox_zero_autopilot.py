@@ -233,7 +233,7 @@ class TestProcessNonTrashItems(unittest.TestCase):
         call_args = svc.users().messages().modify.call_args
         self.assertIn("INBOX", call_args.kwargs["body"]["removeLabelIds"])
 
-    def test_protected_item_not_archived(self):
+    def test_protected_item_archived_after_label(self):
         from inbox_scout.autopilot_cleanup import _process_non_trash_items
 
         svc = self._make_service()
@@ -245,11 +245,11 @@ class TestProcessNonTrashItems(unittest.TestCase):
         }]
         result = _process_non_trash_items(svc, items, {})
 
-        self.assertEqual(result["archived"], 0)
+        self.assertEqual(result["archived"], 1, "Protected items must be archived after label success")
         self.assertEqual(result["protected"], 1)
         call_args = svc.users().messages().modify.call_args
         remove_labels = call_args.kwargs["body"]["removeLabelIds"]
-        self.assertNotIn("INBOX", remove_labels, "Protected items must not have INBOX removed")
+        self.assertIn("INBOX", remove_labels, "Protected items must have INBOX removed after label success")
 
     def test_protected_item_marked_read(self):
         from inbox_scout.autopilot_cleanup import _process_non_trash_items
@@ -291,7 +291,7 @@ class TestProcessNonTrashItems(unittest.TestCase):
 
         svc.users().messages().delete.assert_not_called()
 
-    def test_manual_review_item_not_archived(self):
+    def test_manual_review_item_archived_after_label(self):
         from inbox_scout.autopilot_cleanup import _process_non_trash_items
 
         svc = self._make_service()
@@ -303,10 +303,10 @@ class TestProcessNonTrashItems(unittest.TestCase):
         }]
         result = _process_non_trash_items(svc, items, {})
 
-        self.assertEqual(result["archived"], 0)
+        self.assertEqual(result["archived"], 1, "manual_review items must be archived after label success")
         call_args = svc.users().messages().modify.call_args
         remove_labels = call_args.kwargs["body"]["removeLabelIds"]
-        self.assertNotIn("INBOX", remove_labels, "manual_review items must not be archived")
+        self.assertIn("INBOX", remove_labels, "manual_review items must have INBOX removed after label success")
 
     def test_items_missing_message_id_counted_as_errors(self):
         from inbox_scout.autopilot_cleanup import _process_non_trash_items
@@ -729,8 +729,8 @@ class TestAlwaysRemoveInboxOnLabel(unittest.TestCase):
         remove_labels = call_args.kwargs["body"]["removeLabelIds"]
         self.assertIn("INBOX", remove_labels)
 
-    def test_protected_item_still_keeps_inbox(self):
-        """Protected items must NOT have INBOX removed."""
+    def test_protected_item_has_inbox_removed(self):
+        """Protected items must have INBOX removed after label success (archiving is recoverable)."""
         from inbox_scout.autopilot_cleanup import _process_non_trash_items
         svc = self._make_service()
         items = [{
@@ -740,9 +740,10 @@ class TestAlwaysRemoveInboxOnLabel(unittest.TestCase):
             "local_decision": "protected_review",
         }]
         result = _process_non_trash_items(svc, items, {})
+        self.assertEqual(result["archived"], 1)
         call_args = svc.users().messages().modify.call_args
         remove_labels = call_args.kwargs["body"]["removeLabelIds"]
-        self.assertNotIn("INBOX", remove_labels)
+        self.assertIn("INBOX", remove_labels, "Protected items must have INBOX removed after label success")
 
     def test_label_fail_does_not_remove_inbox(self):
         """If label lookup fails, INBOX must not be removed."""
@@ -753,6 +754,19 @@ class TestAlwaysRemoveInboxOnLabel(unittest.TestCase):
         result = _process_non_trash_items(svc, items, {})
         self.assertEqual(result["errors"], 1)
         svc.users().messages().modify.assert_not_called()
+
+    def test_modify_call_fail_does_not_count_as_archived(self):
+        """If the Gmail modify call fails, item must not be counted as archived."""
+        from inbox_scout.autopilot_cleanup import _process_non_trash_items
+        svc = MagicMock()
+        svc.users().labels().list(userId="me").execute.return_value = {"labels": []}
+        svc.users().labels().create.return_value.execute.return_value = {"id": "Label_x"}
+        svc.users().messages().modify.return_value.execute.side_effect = Exception("modify failed")
+        items = [{"gmail_message_id": "MSG_MODIFAIL", "category": "newsletter", "risk_score": 5}]
+        result = _process_non_trash_items(svc, items, {})
+        self.assertEqual(result["errors"], 1)
+        self.assertEqual(result["archived"], 0, "Failed modify must not increment archived count")
+        self.assertEqual(result["labeled"], 0)
 
 
 class TestSortAllScansTotalInbox(unittest.TestCase):

@@ -417,13 +417,10 @@ def _process_non_trash_items(service: Any, items: list[dict], label_cache: dict)
             continue
 
         add_labels: list[str] = [label_id]
-        remove_labels: list[str] = ["UNREAD"]
-
-        # Remove from INBOX for all successfully labeled non-protected items.
-        # Protected/manual-review items keep their INBOX placement for Ryan to handle.
-        should_remove_from_inbox = not protected
-        if should_remove_from_inbox:
-            remove_labels.append("INBOX")
+        # Always remove INBOX and UNREAD after successful label application.
+        # Protected/manual-review items are labeled InboxScout/Review and archived
+        # (recoverable). Only trashing is blocked for them — not archiving.
+        remove_labels: list[str] = ["INBOX", "UNREAD"]
 
         if protected:
             protected_count += 1
@@ -435,8 +432,7 @@ def _process_non_trash_items(service: Any, items: list[dict], label_cache: dict)
                 body={"addLabelIds": add_labels, "removeLabelIds": remove_labels},
             ).execute()
             labeled += 1
-            if should_remove_from_inbox:
-                archived += 1
+            archived += 1
             marked_read += 1
         except Exception:
             errors += 1
@@ -558,7 +554,7 @@ def run_inbox_zero_autopilot(text: str) -> str:
         f"Labeled (InboxScout): {total_labeled}",
         f"Archived (removed from Inbox): {total_archived}",
         f"Marked read: {total_marked_read}",
-        f"Left in inbox (labeled, protected): {total_protected}",
+        f"Flagged for manual review: {total_protected}",
     ]
     if total_errors:
         lines.append(f"Errors/skipped: {total_errors}")
