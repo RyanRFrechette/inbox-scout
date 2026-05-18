@@ -54,6 +54,7 @@ def create_label(service, name):
 def main():
     parser = argparse.ArgumentParser(description="Inbox Scout Gmail Label Manager")
     parser.add_argument("--create", action="store_true", help="Actually create missing labels")
+    parser.add_argument("--account", default="primary", help="Gmail account to target (default: primary)")
     args = parser.parse_args()
 
     console.print("\n[bold cyan]Inbox Scout Gmail Label Manager[/bold cyan]\n")
@@ -63,7 +64,7 @@ def main():
     else:
         console.print("[yellow]Create mode. Missing Inbox Scout labels will be created.[/yellow]\n")
 
-    service = get_gmail_service(mode="modify")
+    service = get_gmail_service(mode="modify", account=args.account)
     existing = get_existing_labels(service)
 
     table = Table(title="Inbox Scout Label Plan")
