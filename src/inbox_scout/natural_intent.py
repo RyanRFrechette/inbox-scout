@@ -518,6 +518,8 @@ def handle_natural_message(text: str) -> str:
     if any(phrase in msg for phrase in [
         "show my folders",
         "show my archives",
+        "show folders",
+        "list folders",
         "what folders do i have",
         "what is in each folder",
         "show inboxscout folder counts",
