@@ -159,6 +159,7 @@ def build_result(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Inbox Scout safe scan + queue runner")
     parser.add_argument("--run", action="store_true", help="Run read-only Gmail scan and local queue creation.")
+    parser.add_argument("--account", type=str, default="primary", help="Gmail account to scan (primary or secondary).")
     args = parser.parse_args()
 
     plan = load_latest_plan()
@@ -201,6 +202,9 @@ def main() -> None:
     is_full_inbox_scan = plan.get("sort_all") or plan.get("target") == "inbox"
     if not is_full_inbox_scan:
         report_args.append("--unread-only")
+
+    if args.account != "primary":
+        report_args.extend(["--account", args.account])
 
     if is_continuation:
         cursor = load_cursor()

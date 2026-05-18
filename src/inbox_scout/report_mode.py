@@ -32,8 +32,8 @@ def build_gmail_query(unread_only=False, days=None):
     return " ".join(query_parts)
 
 
-def fetch_report_emails(limit=25, unread_only=False, days=None, page_size=25, initial_page_token=None):
-    service = get_gmail_service()
+def fetch_report_emails(limit=25, unread_only=False, days=None, page_size=25, initial_page_token=None, account="primary"):
+    service = get_gmail_service(account=account)
     query = build_gmail_query(unread_only=unread_only, days=days)
 
     max_messages = max(0, int(limit))
@@ -340,6 +340,7 @@ def parse_args():
     parser.add_argument("--category", type=str)
     parser.add_argument("--export", choices=["md", "json", "both"], default="both")
     parser.add_argument("--page-token", type=str, default=None)
+    parser.add_argument("--account", type=str, default="primary")
 
     return parser.parse_args()
 
@@ -356,6 +357,7 @@ def main():
         days=args.days,
         page_size=args.page_size,
         initial_page_token=args.page_token,
+        account=args.account,
     )
 
     results = classify_for_report(emails)

@@ -250,13 +250,16 @@ def _load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8-sig"))
 
 
-def _run_scan() -> subprocess.CompletedProcess[str]:
+def _run_scan(account: str = "primary") -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["PYTHONPATH"] = str(PROJECT_ROOT / "src")
     env["PYTHONUTF8"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
+    argv = [sys.executable, "-m", "inbox_scout.sort_scan_queue_runner", "--run"]
+    if account != "primary":
+        argv += ["--account", account]
     return subprocess.run(
-        [sys.executable, "-m", "inbox_scout.sort_scan_queue_runner", "--run"],
+        argv,
         cwd=str(PROJECT_ROOT),
         env=env,
         text=True,
@@ -265,7 +268,7 @@ def _run_scan() -> subprocess.CompletedProcess[str]:
     )
 
 
-def run_autopilot_cleanup(text: str) -> str:
+def run_autopilot_cleanup(text: str, account: str = "primary") -> str:
     m = re.search(r"\b(\d+)\b", text.lower())
     raw_limit = int(m.group(1)) if m else AUTOPILOT_DEFAULT_LIMIT
     limit = min(max(raw_limit, 1), AUTOPILOT_MAX_LIMIT)
@@ -282,7 +285,7 @@ def run_autopilot_cleanup(text: str) -> str:
 
     # Step 1: read-only Gmail scan + local queue build
     try:
-        result = _run_scan()
+        result = _run_scan(account)
     except subprocess.TimeoutExpired:
         return "Scan timed out after 15 minutes. Gmail not touched."
 
@@ -549,7 +552,7 @@ def _get_modify_service_for_autopilot() -> Any:
         return get_gmail_service("modify")
 
 
-def run_inbox_zero_autopilot(text: str) -> str:
+def run_inbox_zero_autopilot(text: str, account: str = "primary") -> str:
     """Process all unread INBOX emails: trash safe + label + mark-read until inbox is empty."""
     total_scanned = total_trashed = total_labeled = total_archived = 0
     total_marked_read = total_protected = total_errors = 0
@@ -585,7 +588,7 @@ def run_inbox_zero_autopilot(text: str) -> str:
         save_plan(plan)
 
         try:
-            scan_result = _run_scan()
+            scan_result = _run_scan(account)
         except subprocess.TimeoutExpired:
             total_errors += 1
             stopped_early = True

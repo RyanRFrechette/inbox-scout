@@ -561,10 +561,10 @@ def handle_natural_message(text: str) -> str:
         return sort_plan_message(text, cleanup=True)
 
     if _is_inbox_zero(msg):
-        return run_inbox_zero_autopilot(text)
+        return run_inbox_zero_autopilot(text, account=_parse_account(text))
 
     if _is_autopilot_cleanup(msg):
-        return run_autopilot_cleanup(text)
+        return run_autopilot_cleanup(text, account=_parse_account(text))
 
     if any(phrase in msg for phrase in ["next", "next review", "needs review", "what needs my attention"]):
         return next_review_item()
