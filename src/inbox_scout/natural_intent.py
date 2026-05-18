@@ -62,6 +62,15 @@ def _clear_pending_action() -> None:
         _LLM_PENDING_PATH.unlink()
 
 
+_SECONDARY_RE = re.compile(
+    r"\b(second(ary)?|other)\s+(email|account|gmail|inbox)\b", re.IGNORECASE
+)
+
+
+def _parse_account(msg: str) -> str:
+    return "secondary" if _SECONDARY_RE.search(msg) else "primary"
+
+
 def clean(value: Any) -> str:
     if value is None:
         return ""
@@ -520,7 +529,7 @@ def handle_natural_message(text: str) -> str:
         "show labels",
         "inboxscout folders",
     ]):
-        return build_folder_counts_message()
+        return build_folder_counts_message(account=_parse_account(msg))
 
     if is_drilldown_phrase(msg):
         label, days, summarize = parse_drilldown(msg)
@@ -529,7 +538,7 @@ def handle_natural_message(text: str) -> str:
                 "Which InboxScout folder? Try: Receipts, Finance, Promotions, "
                 "Newsletters, Security, Jobs, Personal, Medical, Legal-Tax, Shopping-History."
             )
-        return build_drilldown_message(label, days or 7, summarize=summarize)
+        return build_drilldown_message(label, days or 7, summarize=summarize, account=_parse_account(msg))
 
     if any(phrase in msg for phrase in ["queue", "show emails", "show my emails", "latest batch"]):
         return queue_summary()

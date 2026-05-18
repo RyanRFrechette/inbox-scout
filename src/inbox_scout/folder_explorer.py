@@ -96,9 +96,9 @@ def _build_intro(short: str, estimate: int, shown: int, lines: list[str]) -> str
     return " ".join(parts)
 
 
-def _get_service():
+def _get_service(account: str = "primary"):
     from inbox_scout.gmail_auth import get_gmail_service
-    return get_gmail_service(mode="readonly")
+    return get_gmail_service(mode="readonly", account=account)
 
 
 def resolve_label(text: str) -> Optional[str]:
@@ -146,9 +146,9 @@ def is_drilldown_phrase(text: str) -> bool:
     return has_label and (has_time or has_show_in)
 
 
-def build_folder_counts_message() -> str:
+def build_folder_counts_message(account: str = "primary") -> str:
     try:
-        service = _get_service()
+        service = _get_service(account)
     except Exception as e:
         return f"Couldn't connect to Gmail to check folders.\n\n{e}\n\nNothing was changed."
 
@@ -187,7 +187,7 @@ def build_folder_counts_message() -> str:
     return header + "\n".join(lines) + footer
 
 
-def build_drilldown_message(label_name: str, days: int, summarize: bool = False) -> str:
+def build_drilldown_message(label_name: str, days: int, summarize: bool = False, account: str = "primary") -> str:
     short = label_name[len(INBOX_SCOUT_PREFIX):]
     requested_days = days
     if days > 0:
@@ -206,7 +206,7 @@ def build_drilldown_message(label_name: str, days: int, summarize: bool = False)
     query = f'label:"{label_name}"{date_filter}'
 
     try:
-        service = _get_service()
+        service = _get_service(account)
         resp = service.users().messages().list(
             userId="me",
             q=query,
