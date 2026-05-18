@@ -86,13 +86,25 @@ class TestJobCareerApplicationKeyword(unittest.TestCase):
         self.assertNotEqual(_cat("Web application maintenance notice"), "Job/career")
 
 
+class TestClientBusinessCustomerKeyword(unittest.TestCase):
+
+    def test_dear_customer_not_client_business(self):
+        self.assertNotEqual(_cat("Dear customer, check out these deals"), "Client/business")
+
+    def test_customer_survey_not_client_business(self):
+        self.assertNotEqual(_cat("Customer satisfaction survey"), "Client/business")
+
+    def test_client_quote_still_client_business(self):
+        self.assertEqual(_cat("Client quote attached"), "Client/business")
+
+    def test_contractor_still_client_business(self):
+        self.assertEqual(_cat("New contractor agreement attached"), "Client/business")
+
+
 class TestUnchangedCategories(unittest.TestCase):
 
     def test_mobile_application_update_not_newsletter(self):
         self.assertNotEqual(_cat("Mobile application update available"), "Newsletter")
-
-    def test_dear_customer_still_client_business(self):
-        self.assertEqual(_cat("Dear customer, your order is ready"), "Client/business")
 
     def test_important_legal_notice_still_legal(self):
         self.assertEqual(_cat("Important legal notice"), "Legal")

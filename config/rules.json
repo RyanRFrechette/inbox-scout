@@ -69,7 +69,6 @@
     "Client/business": [
       "client",
       "business",
-      "customer",
       "lead",
       "contractor",
       "quote",
