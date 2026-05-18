@@ -29,6 +29,8 @@ PROTECTED_TERMS_FILE = CONFIG_DIR / "protected_terms.txt"
 PROTECTED_SENDERS_FILE = CONFIG_DIR / "protected_senders.txt"
 RULES_FILE = CONFIG_DIR / "rules.json"
 
+LATEST_RESORT_PLAN = DATA_DIR / "plans" / "latest_resort_plan.json"
+
 
 def verify_project_structure() -> dict:
     required_paths = [
