@@ -314,9 +314,16 @@ def _llm_fallback(text: str) -> str:
         return build_inbox_count_message()
     if intent == "inbox_zero_autopilot":
         _save_pending_autopilot(text)
+        _acct = _parse_account(text)
+        _acct_label = (
+            "second email (ryanrfrechette@gmail.com)"
+            if _acct == "secondary"
+            else "primary email (ryanrjfrechette@gmail.com)"
+        )
         return (
             "I can start safely working through your inbox — "
             "this can move, label, and trash safe emails.\n\n"
+            f"Target: {_acct_label}\n\n"
             "Reply CONFIRM INBOX AUTOPILOT to start, or 'cancel autopilot' to cancel."
         )
     if intent == "queue_summary":
@@ -339,7 +346,8 @@ def handle_natural_message(text: str) -> str:
         pending = _get_pending_action()
         if pending.get("pending") == "inbox_zero_autopilot":
             _clear_pending_action()
-            return run_inbox_zero_autopilot(pending.get("original_text", text))
+            _orig = pending.get("original_text", text)
+            return run_inbox_zero_autopilot(_orig, account=_parse_account(_orig))
         return "No inbox autopilot is pending. Say something like 'handle my inbox' to start."
 
     if any(p in msg for p in ("cancel autopilot", "cancel inbox autopilot")):
