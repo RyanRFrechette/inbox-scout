@@ -59,6 +59,7 @@ def get_gmail_service(mode="readonly", account="primary"):
             )
             creds = flow.run_local_server(port=0, timeout_seconds=600)
 
+        token_file.parent.mkdir(parents=True, exist_ok=True)
         token_file.write_text(creds.to_json(), encoding="utf-8")
 
     return build("gmail", "v1", credentials=creds)
