@@ -68,10 +68,25 @@ class TestNewsletterKeywords(unittest.TestCase):
         self.assertNotEqual(_cat("Software update available for your device"), "Newsletter")
 
 
-class TestUnchangedCategories(unittest.TestCase):
+class TestJobCareerApplicationKeyword(unittest.TestCase):
 
-    def test_job_application_still_job_career(self):
+    def test_job_application_received_is_job_career(self):
         self.assertEqual(_cat("Your job application received"), "Job/career")
+
+    def test_application_status_update_is_job_career(self):
+        self.assertEqual(_cat("Application status update from Acme"), "Job/career")
+
+    def test_your_application_is_job_career(self):
+        self.assertEqual(_cat("Your application has been reviewed"), "Job/career")
+
+    def test_mobile_application_not_job_career(self):
+        self.assertNotEqual(_cat("Mobile application update available"), "Job/career")
+
+    def test_web_application_not_job_career(self):
+        self.assertNotEqual(_cat("Web application maintenance notice"), "Job/career")
+
+
+class TestUnchangedCategories(unittest.TestCase):
 
     def test_mobile_application_update_not_newsletter(self):
         self.assertNotEqual(_cat("Mobile application update available"), "Newsletter")
