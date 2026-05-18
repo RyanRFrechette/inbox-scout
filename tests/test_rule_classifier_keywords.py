@@ -119,6 +119,21 @@ class TestLegalNoticeKeyword(unittest.TestCase):
         self.assertEqual(_cat("Attorney documents attached"), "Legal")
 
 
+class TestVetAndWarrantyKeywords(unittest.TestCase):
+
+    def test_veteran_day_not_medical(self):
+        self.assertNotEqual(_cat("Veteran Day sale 20% off"), "Medical")
+
+    def test_vet_appointment_still_medical(self):
+        self.assertEqual(_cat("Vet appointment reminder for Max"), "Medical")
+
+    def test_claim_reward_not_warranty(self):
+        self.assertNotEqual(_cat("Claim your free reward now!"), "Warranty/support")
+
+    def test_warranty_claim_still_warranty(self):
+        self.assertEqual(_cat("Warranty claim submitted for MacBook"), "Warranty/support")
+
+
 class TestUnchangedCategories(unittest.TestCase):
 
     def test_mobile_application_update_not_newsletter(self):

@@ -50,7 +50,7 @@
       "support",
       "replacement",
       "return confirmed",
-      "claim",
+      "warranty claim",
       "case number"
     ],
     "Job/career": [
@@ -91,7 +91,7 @@
       "hospital",
       "insurance",
       "veterinary",
-      "vet"
+      "vet appointment"
     ],
     "Personal": [
       "family",
