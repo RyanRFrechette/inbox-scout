@@ -43,10 +43,22 @@ class TestDigestWorthy(unittest.TestCase):
         item = _item(**{"from": "noreply@shop.com", "subject": "Your purchase confirmation"})
         self.assertFalse(_is_digest_worthy(item))
 
-    def test_archive_candidate_order_not_digest_worthy(self):
+    def test_amazon_archive_candidate_delivery_not_digest_worthy(self):
         from inbox_scout.autopilot_cleanup import _is_digest_worthy
         item = _item(category="Archive candidate", subject="Your order has been delivered")
         self.assertFalse(_is_digest_worthy(item))
+
+    def test_archive_candidate_generic_sender_manual_review_is_digest_worthy(self):
+        from inbox_scout.autopilot_cleanup import _is_digest_worthy
+        item = {
+            "category": "Archive candidate",
+            "from": "team@somecompany.com",
+            "subject": "Meeting rescheduled",
+            "snippet": "We need to move the call to Friday.",
+            "manual_review": True,
+            "local_decision": "pending_review",
+        }
+        self.assertTrue(_is_digest_worthy(item))
 
     def test_amazon_order_with_payment_issue_is_digest_worthy(self):
         from inbox_scout.autopilot_cleanup import _is_digest_worthy

@@ -43,7 +43,6 @@ _DIGEST_NOISE_CATEGORIES: frozenset = frozenset({
 # No action required unless a problem signal is present.
 _DIGEST_ROUTINE_CATEGORIES: frozenset[str] = frozenset({
     "bills/receipts",
-    "archive candidate",
 })
 
 # Sender substrings that identify known order/shipping automation.
