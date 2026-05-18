@@ -102,14 +102,16 @@
       "digest",
       "welcome to",
       "weekly",
-      "update"
+      "weekly update",
+      "product update"
     ],
     "Promotion": [
       "sale",
-      "off",
+      "% off",
       "discount",
       "deal",
-      "save",
+      "save now",
+      "save up to",
       "new arrivals",
       "last chance"
     ],
