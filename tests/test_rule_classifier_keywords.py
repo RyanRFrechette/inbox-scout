@@ -101,13 +101,28 @@ class TestClientBusinessCustomerKeyword(unittest.TestCase):
         self.assertEqual(_cat("New contractor agreement attached"), "Client/business")
 
 
+class TestLegalNoticeKeyword(unittest.TestCase):
+
+    def test_important_legal_notice_still_legal(self):
+        self.assertEqual(_cat("Important legal notice"), "Legal")
+
+    def test_notice_of_delivery_not_legal(self):
+        self.assertNotEqual(_cat("Notice of delivery"), "Legal")
+
+    def test_account_notice_not_legal(self):
+        self.assertNotEqual(_cat("Important notice about your account"), "Legal")
+
+    def test_court_date_still_legal(self):
+        self.assertEqual(_cat("Court date reminder"), "Legal")
+
+    def test_attorney_docs_still_legal(self):
+        self.assertEqual(_cat("Attorney documents attached"), "Legal")
+
+
 class TestUnchangedCategories(unittest.TestCase):
 
     def test_mobile_application_update_not_newsletter(self):
         self.assertNotEqual(_cat("Mobile application update available"), "Newsletter")
-
-    def test_important_legal_notice_still_legal(self):
-        self.assertEqual(_cat("Important legal notice"), "Legal")
 
 
 if __name__ == "__main__":
