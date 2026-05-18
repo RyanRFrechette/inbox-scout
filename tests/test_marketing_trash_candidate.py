@@ -109,6 +109,36 @@ class TestMarketingTrashCandidate(unittest.TestCase):
         ok, _ = is_safe_trash_candidate(item)
         self.assertFalse(ok)
 
+    def test_junk_low_risk_is_safe(self):
+        from inbox_scout.trash_candidate_plan import is_safe_trash_candidate
+        item = _item(category="Junk", subject="Win a free iPhone now!!!")
+        ok, reason = is_safe_trash_candidate(item)
+        self.assertTrue(ok, f"expected safe; reason: {reason}")
+
+    def test_junk_with_danger_signal_blocked(self):
+        from inbox_scout.trash_candidate_plan import is_safe_trash_candidate
+        item = _item(category="Junk", subject="Your password reset link")
+        ok, _ = is_safe_trash_candidate(item)
+        self.assertFalse(ok)
+
+    def test_junk_manual_review_blocked(self):
+        from inbox_scout.trash_candidate_plan import is_safe_trash_candidate
+        item = _item(category="Junk", subject="Spam-ish email", manual_review=True)
+        ok, _ = is_safe_trash_candidate(item)
+        self.assertFalse(ok)
+
+    def test_junk_high_risk_blocked(self):
+        from inbox_scout.trash_candidate_plan import is_safe_trash_candidate
+        item = _item(category="Junk", subject="Click here now", risk_score=50)
+        ok, _ = is_safe_trash_candidate(item)
+        self.assertFalse(ok)
+
+    def test_archive_candidate_not_trash_safe_without_marketing(self):
+        from inbox_scout.trash_candidate_plan import is_safe_trash_candidate
+        item = _item(category="Archive candidate", subject="Just an email to archive", risk_score=20)
+        ok, _ = is_safe_trash_candidate(item)
+        self.assertFalse(ok)
+
     def test_runner_validate_accepts_marketing_rescue(self):
         # Confirms the runner's validate_candidate also honors the rescue path.
         from inbox_scout.inbox_cleanup_runner import validate_candidate

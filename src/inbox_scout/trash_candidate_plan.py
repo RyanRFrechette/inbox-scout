@@ -30,6 +30,7 @@ PROTECTED_CATEGORIES = {
 TRASH_SAFE_CATEGORIES = {
     "newsletter",
     "promotion",
+    "junk",
 }
 
 
@@ -248,7 +249,7 @@ def is_safe_trash_candidate(item: dict[str, Any]) -> tuple[bool, str]:
         return False, "Protected danger signal in sender/subject/snippet."
 
     if category in TRASH_SAFE_CATEGORIES:
-        return True, "Low-risk newsletter/promotion clutter. Safe Trash-review candidate after approval."
+        return True, "Low-risk newsletter/promotion/junk clutter. Safe Trash-review candidate after approval."
 
     if category in MARKETING_RESCUE_CATEGORIES:
         if has_obvious_marketing_signal(item):
