@@ -39,8 +39,63 @@ _DIGEST_NOISE_CATEGORIES: frozenset = frozenset({
     "InboxScout/Shopping-History",
 })
 
+# Rule-classified categories that represent routine transactional mail.
+# No action required unless a problem signal is present.
+_DIGEST_ROUTINE_CATEGORIES: frozenset[str] = frozenset({
+    "bills/receipts",
+    "archive candidate",
+})
+
+# Sender substrings that identify known order/shipping automation.
+_DIGEST_SHOPPING_SENDER_TOKENS: frozenset[str] = frozenset({
+    "amazon",
+    "auto-confirm@",
+    "ship-confirm@",
+})
+
+# Problem signals that override routine suppression and keep the item in digest.
+_DIGEST_PROBLEM_SIGNALS: frozenset[str] = frozenset({
+    "refund",
+    "failed",
+    "declined",
+    "payment issue",
+    "cancelled",
+    "cancellation",
+    "delayed",
+    "problem",
+    "dispute",
+    "chargeback",
+    "returned",
+    "return required",
+    "action required",
+    "suspicious",
+    "fraud",
+})
+
+
+def _is_routine_shopping(item: dict) -> bool:
+    """True when item is a routine order/receipt/shipping confirmation with no problem signal."""
+    cat = (item.get("category") or "").strip().lower()
+    sender = (item.get("from") or item.get("sender") or "").lower()
+    subject = (item.get("subject") or "").lower()
+    snippet = (item.get("snippet") or "").lower()
+    combined = f"{sender} {subject} {snippet}"
+
+    if any(sig in combined for sig in _DIGEST_PROBLEM_SIGNALS):
+        return False
+
+    if cat in _DIGEST_ROUTINE_CATEGORIES:
+        return True
+
+    if any(tok in sender for tok in _DIGEST_SHOPPING_SENDER_TOKENS):
+        return True
+
+    return False
+
 
 def _is_digest_worthy(item: dict) -> bool:
+    if _is_routine_shopping(item):
+        return False
     if item.get("manual_review") or item.get("local_decision") == "protected_review":
         return True
     cat = (item.get("category") or "").strip()
