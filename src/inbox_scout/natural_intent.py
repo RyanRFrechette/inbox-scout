@@ -25,7 +25,7 @@ from inbox_scout.trash_sender_block_runner import build_sender_block_runner_mess
 from inbox_scout.model_router import get_provider, set_provider, model_status_message, get_active_provider, OLLAMA_MODEL, OPENROUTER_MODEL
 from inbox_scout.mark_read_runner import build_mark_read_plan_message, build_mark_read_runner_message
 from inbox_scout.queue_decision import build_set_decision_message
-from inbox_scout.autopilot_cleanup import run_autopilot_cleanup, run_inbox_zero_autopilot
+from inbox_scout.autopilot_cleanup import run_autopilot_cleanup, run_inbox_zero_autopilot, _is_digest_worthy
 from inbox_scout.natural_intent_llm import parse_intent, CONFIDENCE_THRESHOLD
 from inbox_scout.folder_explorer import (
     build_folder_counts_message,
@@ -144,14 +144,63 @@ def _autopilot_confirm_prompt(text: str) -> str:
     )
 
 
+_DIGEST_BUCKET_MAP: dict = {
+    "InboxScout/Jobs": "Jobs / Interviews",
+    "InboxScout/Finance": "Money / Bills / Security",
+    "InboxScout/Security": "Money / Bills / Security",
+    "InboxScout/Medical": "Medical / Legal",
+    "InboxScout/Legal-Tax": "Medical / Legal",
+    "InboxScout/Personal": "Personal / Urgent",
+}
+_DIGEST_BUCKET_ORDER = [
+    "Jobs / Interviews",
+    "Money / Bills / Security",
+    "Medical / Legal",
+    "Personal / Urgent",
+    "Needs Review",
+]
+
+
+def _build_important_digest(primary_items: list, secondary_items: list) -> str:
+    primary_items = [i for i in primary_items if _is_digest_worthy(i)]
+    secondary_items = [i for i in secondary_items if _is_digest_worthy(i)]
+    if not primary_items and not secondary_items:
+        return "No important emails flagged from this run."
+    sections = []
+    for label, items in [("Primary email", primary_items), ("Second email", secondary_items)]:
+        if not items:
+            continue
+        buckets: dict = {b: [] for b in _DIGEST_BUCKET_ORDER}
+        for item in items:
+            cat = (item.get("category") or "").strip()
+            bucket = _DIGEST_BUCKET_MAP.get(cat, "Needs Review")
+            subject = item.get("subject") or "(No subject)"
+            sender = item.get("from") or ""
+            buckets[bucket].append(f"- {subject} — {sender}")
+        account_lines = [f"{label}:"]
+        for bucket in _DIGEST_BUCKET_ORDER:
+            if buckets[bucket]:
+                account_lines.append(f"  {bucket}:")
+                account_lines.extend(f"    {line}" for line in buckets[bucket])
+        if len(account_lines) > 1:
+            sections.append("\n".join(account_lines))
+    if not sections:
+        return "No important emails flagged from this run."
+    return "--- What needs your attention ---\n" + "\n\n".join(sections)
+
+
 def _run_both_inbox_zero(text: str) -> str:
-    primary_result = run_inbox_zero_autopilot(text, account="primary")
-    secondary_result = run_inbox_zero_autopilot(text, account="secondary")
+    primary_items: list = []
+    primary_result = run_inbox_zero_autopilot(text, account="primary", _collect=primary_items)
+    secondary_items: list = []
+    secondary_result = run_inbox_zero_autopilot(text, account="secondary", _collect=secondary_items)
+    digest = _build_important_digest(primary_items, secondary_items)
     return (
         "--- Primary email ---\n"
         f"{primary_result}\n\n"
         "--- Second email ---\n"
-        f"{secondary_result}"
+        f"{secondary_result}\n\n"
+        f"{digest}"
     )
 
 

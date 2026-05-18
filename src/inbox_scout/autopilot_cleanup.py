@@ -24,6 +24,29 @@ AUTOPILOT_DEFAULT_LIMIT = 25
 AUTOPILOT_EMERGENCY_CAP = 5000  # Runaway protection only — not a product limit
 QUEUE_PATH = PROJECT_ROOT / "data" / "review_queue" / "latest_queue.json"
 
+_DIGEST_IMPORTANT_CATEGORIES: frozenset = frozenset({
+    "InboxScout/Jobs",
+    "InboxScout/Finance",
+    "InboxScout/Security",
+    "InboxScout/Medical",
+    "InboxScout/Legal-Tax",
+    "InboxScout/Personal",
+})
+
+_DIGEST_NOISE_CATEGORIES: frozenset = frozenset({
+    "InboxScout/Newsletters",
+    "InboxScout/Promotions",
+    "InboxScout/Shopping-History",
+})
+
+
+def _is_digest_worthy(item: dict) -> bool:
+    if item.get("manual_review") or item.get("local_decision") == "protected_review":
+        return True
+    cat = (item.get("category") or "").strip()
+    return cat in _DIGEST_IMPORTANT_CATEGORIES
+
+
 CATEGORY_TO_LABEL: dict[str, str] = {
     # Receipts — order/payment confirmations, invoices, bills paid
     "receipt": "InboxScout/Receipts",
@@ -552,7 +575,7 @@ def _get_modify_service_for_autopilot(account: str = "primary") -> Any:
         return get_gmail_service("modify")
 
 
-def run_inbox_zero_autopilot(text: str, account: str = "primary") -> str:
+def run_inbox_zero_autopilot(text: str, account: str = "primary", _collect: list | None = None) -> str:
     """Process all unread INBOX emails: trash safe + label + mark-read until inbox is empty."""
     total_scanned = total_trashed = total_labeled = total_archived = 0
     total_marked_read = total_protected = total_errors = 0
@@ -603,6 +626,9 @@ def run_inbox_zero_autopilot(text: str, account: str = "primary") -> str:
         items = _load_items_from_queue()
         if not items:
             break  # Inbox fully processed.
+
+        if _collect is not None:
+            _collect.extend(item for item in items if _is_digest_worthy(item))
 
         total_scanned += len(items)
 
