@@ -98,6 +98,18 @@ def _account_label(scope: str) -> str:
     return "primary email (ryanrjfrechette@gmail.com)"
 
 
+def _autopilot_confirm_prompt(text: str) -> str:
+    """Save pending action and return confirmation prompt showing target account scope."""
+    _save_pending_autopilot(text)
+    _acct = _account_scope_for_action(text)
+    return (
+        "I can start safely working through your inbox — "
+        "this can move, label, and trash safe emails.\n\n"
+        f"Target: {_account_label(_acct)}\n\n"
+        "Reply CONFIRM INBOX AUTOPILOT to start, or 'cancel autopilot' to cancel."
+    )
+
+
 def _run_both_inbox_zero(text: str) -> str:
     primary_result = run_inbox_zero_autopilot(text, account="primary")
     secondary_result = run_inbox_zero_autopilot(text, account="secondary")
@@ -362,14 +374,7 @@ def _llm_fallback(text: str) -> str:
     if intent == "inbox_count":
         return build_inbox_count_message()
     if intent == "inbox_zero_autopilot":
-        _save_pending_autopilot(text)
-        _acct = _account_scope_for_action(text)
-        return (
-            "I can start safely working through your inbox — "
-            "this can move, label, and trash safe emails.\n\n"
-            f"Target: {_account_label(_acct)}\n\n"
-            "Reply CONFIRM INBOX AUTOPILOT to start, or 'cancel autopilot' to cancel."
-        )
+        return _autopilot_confirm_prompt(text)
     if intent == "queue_summary":
         return queue_summary()
     if intent == "next_review_item":
@@ -618,13 +623,13 @@ def handle_natural_message(text: str) -> str:
     if _is_inbox_zero(msg):
         _scope = _account_scope_for_action(text)
         if _scope == "both":
-            return _run_both_inbox_zero(text)
+            return _autopilot_confirm_prompt(text)
         return run_inbox_zero_autopilot(text, account=_scope)
 
     if _is_autopilot_cleanup(msg):
         _scope = _account_scope_for_action(text)
         if _scope == "both":
-            return _run_both_autopilot_cleanup(text)
+            return _autopilot_confirm_prompt(text)
         return run_autopilot_cleanup(text, account=_scope)
 
     if any(phrase in msg for phrase in ["next", "next review", "needs review", "what needs my attention"]):
