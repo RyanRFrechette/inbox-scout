@@ -62,13 +62,62 @@ def _clear_pending_action() -> None:
         _LLM_PENDING_PATH.unlink()
 
 
+_PRIMARY_RE = re.compile(
+    r"\b(first|main|primary)\s+(email|account|gmail|inbox)\b", re.IGNORECASE
+)
 _SECONDARY_RE = re.compile(
     r"\b(second(ary)?|other)\s+(email|account|gmail|inbox)\b", re.IGNORECASE
+)
+_BOTH_RE = re.compile(
+    r"\b(both|all)\s+(emails?|accounts?|gmails?|inboxes?)\b", re.IGNORECASE
 )
 
 
 def _parse_account(msg: str) -> str:
-    return "secondary" if _SECONDARY_RE.search(msg) else "primary"
+    """Return explicit account scope, or 'unspecified' if no account phrase present."""
+    if _BOTH_RE.search(msg):
+        return "both"
+    if _PRIMARY_RE.search(msg):
+        return "primary"
+    if _SECONDARY_RE.search(msg):
+        return "secondary"
+    return "unspecified"
+
+
+def _account_scope_for_action(text: str) -> str:
+    """For write-capable action commands: treat unspecified as both."""
+    scope = _parse_account(text)
+    return "both" if scope == "unspecified" else scope
+
+
+def _account_label(scope: str) -> str:
+    if scope == "both":
+        return "both emails (ryanrjfrechette@gmail.com + ryanrfrechette@gmail.com)"
+    if scope == "secondary":
+        return "second email (ryanrfrechette@gmail.com)"
+    return "primary email (ryanrjfrechette@gmail.com)"
+
+
+def _run_both_inbox_zero(text: str) -> str:
+    primary_result = run_inbox_zero_autopilot(text, account="primary")
+    secondary_result = run_inbox_zero_autopilot(text, account="secondary")
+    return (
+        "--- Primary email ---\n"
+        f"{primary_result}\n\n"
+        "--- Second email ---\n"
+        f"{secondary_result}"
+    )
+
+
+def _run_both_autopilot_cleanup(text: str) -> str:
+    primary_result = run_autopilot_cleanup(text, account="primary")
+    secondary_result = run_autopilot_cleanup(text, account="secondary")
+    return (
+        "--- Primary email ---\n"
+        f"{primary_result}\n\n"
+        "--- Second email ---\n"
+        f"{secondary_result}"
+    )
 
 
 def clean(value: Any) -> str:
@@ -314,16 +363,11 @@ def _llm_fallback(text: str) -> str:
         return build_inbox_count_message()
     if intent == "inbox_zero_autopilot":
         _save_pending_autopilot(text)
-        _acct = _parse_account(text)
-        _acct_label = (
-            "second email (ryanrfrechette@gmail.com)"
-            if _acct == "secondary"
-            else "primary email (ryanrjfrechette@gmail.com)"
-        )
+        _acct = _account_scope_for_action(text)
         return (
             "I can start safely working through your inbox — "
             "this can move, label, and trash safe emails.\n\n"
-            f"Target: {_acct_label}\n\n"
+            f"Target: {_account_label(_acct)}\n\n"
             "Reply CONFIRM INBOX AUTOPILOT to start, or 'cancel autopilot' to cancel."
         )
     if intent == "queue_summary":
@@ -347,7 +391,10 @@ def handle_natural_message(text: str) -> str:
         if pending.get("pending") == "inbox_zero_autopilot":
             _clear_pending_action()
             _orig = pending.get("original_text", text)
-            return run_inbox_zero_autopilot(_orig, account=_parse_account(_orig))
+            _scope = _account_scope_for_action(_orig)
+            if _scope == "both":
+                return _run_both_inbox_zero(_orig)
+            return run_inbox_zero_autopilot(_orig, account=_scope)
         return "No inbox autopilot is pending. Say something like 'handle my inbox' to start."
 
     if any(p in msg for p in ("cancel autopilot", "cancel inbox autopilot")):
@@ -569,10 +616,16 @@ def handle_natural_message(text: str) -> str:
         return sort_plan_message(text, cleanup=True)
 
     if _is_inbox_zero(msg):
-        return run_inbox_zero_autopilot(text, account=_parse_account(text))
+        _scope = _account_scope_for_action(text)
+        if _scope == "both":
+            return _run_both_inbox_zero(text)
+        return run_inbox_zero_autopilot(text, account=_scope)
 
     if _is_autopilot_cleanup(msg):
-        return run_autopilot_cleanup(text, account=_parse_account(text))
+        _scope = _account_scope_for_action(text)
+        if _scope == "both":
+            return _run_both_autopilot_cleanup(text)
+        return run_autopilot_cleanup(text, account=_scope)
 
     if any(phrase in msg for phrase in ["next", "next review", "needs review", "what needs my attention"]):
         return next_review_item()
