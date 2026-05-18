@@ -6,7 +6,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from rich.console import Console
 
-from inbox_scout.paths import CREDENTIALS_DIR, PROJECT_ROOT
+from inbox_scout.paths import CREDENTIALS_DIR, PROJECT_ROOT, get_token_path
 
 console = Console()
 
@@ -20,21 +20,23 @@ MODIFY_TOKEN_FILE = PROJECT_ROOT / "token_modify.json"
 SETTINGS_TOKEN_FILE = PROJECT_ROOT / "token_settings.json"
 
 
-def get_auth_config(mode="readonly"):
+def get_auth_config(mode="readonly", account="primary"):
+    token_file = get_token_path(account, mode)
+
     if mode == "readonly":
-        return READONLY_SCOPES, READONLY_TOKEN_FILE, "read-only"
+        return READONLY_SCOPES, token_file, "read-only"
 
     if mode == "modify":
-        return MODIFY_SCOPES, MODIFY_TOKEN_FILE, "modify"
+        return MODIFY_SCOPES, token_file, "modify"
 
     if mode == "settings":
-        return SETTINGS_SCOPES, SETTINGS_TOKEN_FILE, "settings"
+        return SETTINGS_SCOPES, token_file, "settings"
 
     raise ValueError("Invalid Gmail auth mode. Use 'readonly', 'modify', or 'settings'.")
 
 
-def get_gmail_service(mode="readonly"):
-    scopes, token_file, mode_label = get_auth_config(mode)
+def get_gmail_service(mode="readonly", account="primary"):
+    scopes, token_file, mode_label = get_auth_config(mode, account)
     creds = None
 
     if token_file.exists():

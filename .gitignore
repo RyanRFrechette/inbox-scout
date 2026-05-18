@@ -12,6 +12,7 @@ __pycache__/
 token.json
 token_modify.json
 token_settings.json
+tokens/
 
 # Gmail OAuth credentials
 credentials/

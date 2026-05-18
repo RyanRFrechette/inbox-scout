@@ -5,6 +5,20 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CREDENTIALS_DIR = PROJECT_ROOT / "credentials"
 CONFIG_DIR = PROJECT_ROOT / "config"
 DATA_DIR = PROJECT_ROOT / "data"
+TOKENS_DIR = PROJECT_ROOT / "tokens"
+
+# Legacy primary-account token paths (kept at project root for backward compat)
+_PRIMARY_TOKEN_FILES = {
+    "readonly": PROJECT_ROOT / "token.json",
+    "modify": PROJECT_ROOT / "token_modify.json",
+    "settings": PROJECT_ROOT / "token_settings.json",
+}
+
+
+def get_token_path(account: str, mode: str) -> Path:
+    if account == "primary":
+        return _PRIMARY_TOKEN_FILES[mode]
+    return TOKENS_DIR / f"{account}_{mode}.json"
 
 RAW_DIR = DATA_DIR / "raw"
 EXPORTS_DIR = DATA_DIR / "exports"
