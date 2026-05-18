@@ -62,6 +62,40 @@ def _clear_pending_action() -> None:
         _LLM_PENDING_PATH.unlink()
 
 
+_CONFIRM_ALIASES: frozenset = frozenset({
+    "confirm", "yes", "y", "yep", "yeah", "do it", "go ahead",
+    "start", "run it", "proceed", "approve", "okay", "ok", "sure",
+})
+
+_CANCEL_ALIASES: frozenset = frozenset({
+    "cancel", "stop", "nevermind", "never mind", "no", "nope",
+    "don't", "dont", "abort", "back out", "forget it", "not now",
+    "cancel that", "stop that",
+})
+
+
+def _is_pending_autopilot_confirmation(msg: str) -> bool:
+    return (
+        _get_pending_action().get("pending") == "inbox_zero_autopilot"
+        and msg in _CONFIRM_ALIASES
+    )
+
+
+def _is_pending_autopilot_cancellation(msg: str) -> bool:
+    return (
+        bool(_get_pending_action().get("pending"))
+        and msg in _CANCEL_ALIASES
+    )
+
+
+def _execute_pending_autopilot(pending: dict, fallback_text: str) -> str:
+    _orig = pending.get("original_text", fallback_text)
+    _scope = _account_scope_for_action(_orig)
+    if _scope == "both":
+        return _run_both_inbox_zero(_orig)
+    return run_inbox_zero_autopilot(_orig, account=_scope)
+
+
 _PRIMARY_RE = re.compile(
     r"\b(first|main|primary)\s+(email|account|gmail|inbox)\b", re.IGNORECASE
 )
@@ -390,17 +424,24 @@ def _llm_fallback(text: str) -> str:
 def handle_natural_message(text: str) -> str:
     msg = text.lower().strip()
 
-    # LLM autopilot confirmation gate — must run before all other routing
+    # Natural confirmation aliases — only fires when pending autopilot exists
+    if _is_pending_autopilot_confirmation(msg):
+        pending = _get_pending_action()
+        _clear_pending_action()
+        return _execute_pending_autopilot(pending, text)
+
+    # Exact confirm phrase — also gives feedback when nothing is pending
     if msg == "confirm inbox autopilot":
         pending = _get_pending_action()
         if pending.get("pending") == "inbox_zero_autopilot":
             _clear_pending_action()
-            _orig = pending.get("original_text", text)
-            _scope = _account_scope_for_action(_orig)
-            if _scope == "both":
-                return _run_both_inbox_zero(_orig)
-            return run_inbox_zero_autopilot(_orig, account=_scope)
+            return _execute_pending_autopilot(pending, text)
         return "No inbox autopilot is pending. Say something like 'handle my inbox' to start."
+
+    # Natural cancellation aliases — only fires when pending exists
+    if _is_pending_autopilot_cancellation(msg):
+        _clear_pending_action()
+        return "Cancelled. Gmail not touched."
 
     if any(p in msg for p in ("cancel autopilot", "cancel inbox autopilot")):
         if _get_pending_action().get("pending"):
