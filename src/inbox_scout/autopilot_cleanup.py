@@ -544,10 +544,10 @@ def _get_total_inbox_count(service: Any) -> int:
         return 0
 
 
-def _get_modify_service_for_autopilot() -> Any:
+def _get_modify_service_for_autopilot(account: str = "primary") -> Any:
     from inbox_scout.gmail_auth import get_gmail_service
     try:
-        return get_gmail_service(mode="modify")
+        return get_gmail_service(mode="modify", account=account)
     except TypeError:
         return get_gmail_service("modify")
 
@@ -559,7 +559,7 @@ def run_inbox_zero_autopilot(text: str, account: str = "primary") -> str:
     stopped_early = False
 
     try:
-        service = _get_modify_service_for_autopilot()
+        service = _get_modify_service_for_autopilot(account)
     except Exception as e:
         _beep_once()
         return f"Could not connect to Gmail.\n\n{e}\n\nGmail not touched."
