@@ -259,11 +259,6 @@ class TestResortRunMessage(unittest.TestCase):
 
     def test_scan_error_with_partial_mismatches_still_applies(self):
         # One account errors, other has valid corrections — apply should proceed
-        plans_both = [
-            {"account": "primary", "error": "token expired", "mismatches": [], "scanned": 0,
-             "skipped_protected": 0, "skipped_manual_review": 0,
-             "skipped_high_risk": 0, "skipped_review_label": 0},
-        ]
         from inbox_scout import resort_apply_runner
         with tempfile.TemporaryDirectory() as tmpdir:
             plan_path = Path(tmpdir) / "latest_resort_plan.json"
@@ -272,8 +267,7 @@ class TestResortRunMessage(unittest.TestCase):
             # Manually write a plan with one errored account + one good account
             import json as _json
             plan_data = {
-                "created_at": __import__("datetime").datetime.now(
-                    __import__("datetime").timezone.utc).isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
                 "account_scope": "both",
                 "confirmed": False,
                 "plans": [
@@ -297,7 +291,6 @@ class TestResortRunMessage(unittest.TestCase):
 class TestFetchLabelIdsFailure(unittest.TestCase):
     def test_label_fetch_failure_reported_clearly(self):
         from inbox_scout import resort_apply_runner
-        from unittest.mock import MagicMock
         with tempfile.TemporaryDirectory() as tmpdir:
             plan_path = Path(tmpdir) / "latest_resort_plan.json"
             log_path = Path(tmpdir) / "resort_apply.jsonl"
