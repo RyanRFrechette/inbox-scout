@@ -80,6 +80,29 @@ def _validate_mismatch(m: dict) -> tuple[bool, str]:
     return True, ""
 
 
+def build_resort_run_message(account: str = "both") -> str:
+    """Scan InboxScout folders then immediately apply safe label corrections."""
+    from inbox_scout.resort_mode import _scan_one_account
+
+    if account in ("both", "unspecified"):
+        plans = [_scan_one_account("primary"), _scan_one_account("secondary")]
+    elif account == "primary":
+        plans = [_scan_one_account("primary")]
+    else:
+        plans = [_scan_one_account("secondary")]
+
+    combined = {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "account_scope": account,
+        "confirmed": False,
+        "plans": plans,
+    }
+    LATEST_RESORT_PLAN.parent.mkdir(parents=True, exist_ok=True)
+    LATEST_RESORT_PLAN.write_text(json.dumps(combined, indent=2), encoding="utf-8")
+
+    return build_resort_apply_message()
+
+
 def build_resort_apply_message() -> str:
     plan, err = _validate_plan()
     if err:

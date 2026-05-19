@@ -23,7 +23,7 @@ STATE_PATH = PROJECT_ROOT / "config" / "telegram_listener_state.json"
 LATEST_QUEUE = PROJECT_ROOT / "data" / "review_queue" / "latest_queue.json"
 LOG_PATH = PROJECT_ROOT / "data" / "logs" / "telegram_watch.log"
 
-_RESORT_PREVIEW_PHRASES = [
+_RESORT_RUN_PHRASES = [
     "resort my sorted emails",
     "resort my emails",
     "resort sorted emails",
@@ -31,10 +31,14 @@ _RESORT_PREVIEW_PHRASES = [
     "audit my archives",
     "check if anything is in the wrong folder",
     "are my emails sorted correctly",
-    "resort preview",
-    "show resort preview",
     "audit sorted folders",
     "check my sorted folders",
+]
+
+_RESORT_PREVIEW_PHRASES = [
+    "resort preview",
+    "show resort preview",
+    "preview resort",
 ]
 
 
@@ -234,10 +238,16 @@ def run_once() -> None:
             continue
 
         print(f"Command received: {text}")
-        is_resort = any(phrase in text.lower() for phrase in _RESORT_PREVIEW_PHRASES)
-        if is_resort:
+        _msg_lower = text.lower()
+        is_resort_run = any(phrase in _msg_lower for phrase in _RESORT_RUN_PHRASES)
+        is_resort_preview = any(phrase in _msg_lower for phrase in _RESORT_PREVIEW_PHRASES)
+        if is_resort_run or is_resort_preview:
+            if is_resort_run:
+                ack = "Got it — scanning your sorted folders and applying safe label corrections. Labels only, no trash or delete."
+            else:
+                ack = "Got it — scanning your sorted folders (preview only). This is read-only and will not change Gmail."
             try:
-                send_message("Got it — starting Resort Mode Preview now. This is read-only and will not change Gmail.")
+                send_message(ack)
             except Exception:
                 pass
 
@@ -246,16 +256,16 @@ def run_once() -> None:
                     reply = handle_command(cmd_text)
                 except Exception as exc:
                     _log_error(
-                        f"resort preview thread error for {cmd_text!r}:\n{traceback.format_exc()}"
+                        f"resort thread error for {cmd_text!r}:\n{traceback.format_exc()}"
                     )
                     reply = (
-                        f"Resort preview stopped. {type(exc).__name__}: {exc}\n\n"
+                        f"Resort stopped. {type(exc).__name__}: {exc}\n\n"
                         "Gmail not touched."
                     )
                 try:
                     send_message(reply)
                 except Exception as se:
-                    _log_error(f"resort preview send failed: {type(se).__name__}: {se}")
+                    _log_error(f"resort send failed: {type(se).__name__}: {se}")
 
             threading.Thread(target=_resort_thread, daemon=True).start()
         else:

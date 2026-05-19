@@ -200,12 +200,83 @@ class TestLabelOrderAndSafety(unittest.TestCase):
         self.assertIn("Gmail not touched", result)
 
 
+class TestResortRunMessage(unittest.TestCase):
+    def _run_with_plans(self, plans):
+        from inbox_scout import resort_apply_runner
+        with tempfile.TemporaryDirectory() as tmpdir:
+            plan_path = Path(tmpdir) / "latest_resort_plan.json"
+            log_path = Path(tmpdir) / "resort_apply.jsonl"
+            svc = _mock_service()
+            with patch("inbox_scout.resort_mode._scan_one_account", side_effect=plans), \
+                 patch.object(resort_apply_runner, "LATEST_RESORT_PLAN", plan_path), \
+                 patch.object(resort_apply_runner, "RESORT_APPLY_LOG", log_path), \
+                 patch.object(resort_apply_runner, "_get_modify_service", return_value=svc):
+                result = resort_apply_runner.build_resort_run_message(account="primary")
+        return result, svc
+
+    def test_no_mismatches_returns_no_corrections(self):
+        plans = [{"account": "primary", "scanned": 3, "mismatches": [],
+                  "skipped_protected": 0, "skipped_manual_review": 0,
+                  "skipped_high_risk": 0, "skipped_review_label": 0}]
+        result, svc = self._run_with_plans(plans)
+        self.assertIn("Gmail not touched", result)
+        svc.users.return_value.messages.return_value.modify.assert_not_called()
+
+    def test_valid_mismatches_apply_corrections(self):
+        plans = [{"account": "primary", "scanned": 2,
+                  "mismatches": [_mismatch()],
+                  "skipped_protected": 0, "skipped_manual_review": 0,
+                  "skipped_high_risk": 0, "skipped_review_label": 0}]
+        result, svc = self._run_with_plans(plans)
+        modify_mock = svc.users.return_value.messages.return_value.modify
+        self.assertGreaterEqual(modify_mock.call_count, 1)
+
+    def test_run_applies_new_label_before_removing_old(self):
+        plans = [{"account": "primary", "scanned": 2,
+                  "mismatches": [_mismatch()],
+                  "skipped_protected": 0, "skipped_manual_review": 0,
+                  "skipped_high_risk": 0, "skipped_review_label": 0}]
+        result, svc = self._run_with_plans(plans)
+        modify_mock = svc.users.return_value.messages.return_value.modify
+        self.assertEqual(modify_mock.call_count, 2)
+        self.assertIn("addLabelIds", modify_mock.call_args_list[0][1]["body"])
+        self.assertIn("removeLabelIds", modify_mock.call_args_list[1][1]["body"])
+
+
 class TestNaturalIntentRouting(unittest.TestCase):
     def _route(self, phrase):
         from inbox_scout.natural_intent import handle_natural_message
         return handle_natural_message(phrase)
 
-    def test_confirm_resort_apply_routes_to_runner(self):
+    def test_resort_my_sorted_emails_routes_to_run(self):
+        from inbox_scout import resort_apply_runner
+        with patch.object(resort_apply_runner, "build_resort_run_message",
+                          return_value="__run_called__") as mock_fn:
+            result = self._route("resort my sorted emails")
+        mock_fn.assert_called_once()
+        self.assertEqual(result, "__run_called__")
+
+    def test_resort_preview_routes_to_preview_only(self):
+        from inbox_scout import resort_apply_runner, resort_mode
+        with patch.object(resort_apply_runner, "build_resort_run_message",
+                          return_value="WRONG") as run_mock, \
+             patch.object(resort_mode, "build_resort_preview_message",
+                          return_value="preview_result"):
+            result = self._route("resort preview")
+        run_mock.assert_not_called()
+        self.assertEqual(result, "preview_result")
+
+    def test_preview_resort_routes_to_preview_only(self):
+        from inbox_scout import resort_apply_runner, resort_mode
+        with patch.object(resort_apply_runner, "build_resort_run_message",
+                          return_value="WRONG") as run_mock, \
+             patch.object(resort_mode, "build_resort_preview_message",
+                          return_value="preview_result"):
+            result = self._route("preview resort")
+        run_mock.assert_not_called()
+        self.assertEqual(result, "preview_result")
+
+    def test_confirm_resort_apply_routes_to_apply(self):
         from inbox_scout import resort_apply_runner
         with patch.object(resort_apply_runner, "build_resort_apply_message",
                           return_value="__apply_called__") as mock_fn:
@@ -213,30 +284,15 @@ class TestNaturalIntentRouting(unittest.TestCase):
         mock_fn.assert_called_once()
         self.assertEqual(result, "__apply_called__")
 
-    def test_apply_resort_fixes_routes_to_runner(self):
-        from inbox_scout import resort_apply_runner
-        with patch.object(resort_apply_runner, "build_resort_apply_message",
-                          return_value="__apply_called__") as mock_fn:
-            result = self._route("apply resort fixes")
-        mock_fn.assert_called_once()
-
-    def test_apply_resort_corrections_routes_to_runner(self):
-        from inbox_scout import resort_apply_runner
-        with patch.object(resort_apply_runner, "build_resort_apply_message",
-                          return_value="__apply_called__") as mock_fn:
-            result = self._route("apply resort corrections")
-        mock_fn.assert_called_once()
-
-    def test_resort_preview_does_not_route_to_apply(self):
-        from inbox_scout import resort_apply_runner
-        from inbox_scout import resort_mode
-        with patch.object(resort_apply_runner, "build_resort_apply_message",
-                          return_value="WRONG") as apply_mock, \
-             patch.object(resort_mode, "build_resort_preview_message",
-                          return_value="preview_result"):
-            result = self._route("resort preview")
-        apply_mock.assert_not_called()
-        self.assertEqual(result, "preview_result")
+    def test_resort_run_does_not_route_to_preview(self):
+        from inbox_scout import resort_apply_runner, resort_mode
+        with patch.object(resort_mode, "build_resort_preview_message",
+                          return_value="WRONG") as preview_mock, \
+             patch.object(resort_apply_runner, "build_resort_run_message",
+                          return_value="run_result"):
+            result = self._route("resort my sorted emails")
+        preview_mock.assert_not_called()
+        self.assertEqual(result, "run_result")
 
 
 if __name__ == "__main__":
