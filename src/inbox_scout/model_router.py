@@ -180,7 +180,7 @@ def classify_with_ollama(email: dict, rule_result: dict) -> dict:
         "options": {"temperature": 0},
     }
     try:
-        response = requests.post(OLLAMA_URL, json=payload, timeout=180)
+        response = requests.post(OLLAMA_URL, json=payload, timeout=45)
         response.raise_for_status()
         raw = response.json().get("response", "")
         return _validate(_extract_json(raw))

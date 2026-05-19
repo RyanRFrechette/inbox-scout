@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import threading
 import traceback
 from datetime import datetime
 from pathlib import Path
@@ -185,6 +186,17 @@ def handle_command(text: str) -> str:
     if command.startswith("confirm ") or command.startswith("/confirm ") or command in {"cancel", "/cancel"}:
         return evaluate_confirm_gate(text)
 
+    if command.startswith(("/model ", "model ")):
+        from inbox_scout.model_router import model_status_message, set_provider
+        parts = command.split(None, 1)
+        sub = parts[1].strip().lower() if len(parts) > 1 else ""
+        if sub == "status":
+            return model_status_message()
+        if sub in ("local", "openrouter", "auto"):
+            set_provider(sub)
+            return f"Model provider set to: {sub}."
+        return "Usage: /model status | /model local | /model openrouter | /model auto"
+
     return handle_natural_message(text)
 
 
@@ -222,29 +234,49 @@ def run_once() -> None:
             continue
 
         print(f"Command received: {text}")
-        if any(phrase in text.lower() for phrase in _RESORT_PREVIEW_PHRASES):
+        is_resort = any(phrase in text.lower() for phrase in _RESORT_PREVIEW_PHRASES)
+        if is_resort:
             try:
                 send_message("Got it — starting Resort Mode Preview now. This is read-only and will not change Gmail.")
             except Exception:
                 pass
-        try:
-            reply = handle_command(text)
-        except Exception as exc:
-            _log_error(
-                f"handle_command exception for {text!r}:\n{traceback.format_exc()}"
-            )
-            reply = (
-                f"Scan stopped. Error: {type(exc).__name__}: {exc}\n\n"
-                "Gmail not touched."
-            )
-        try:
-            send_message(reply)
-        except Exception as send_exc:
-            _log_error(
-                f"send_message failed: {type(send_exc).__name__}: {send_exc}\n"
-                f"Reply was: {reply[:300]}"
-            )
-        print("Reply sent.")
+
+            def _resort_thread(cmd_text=text):
+                try:
+                    reply = handle_command(cmd_text)
+                except Exception as exc:
+                    _log_error(
+                        f"resort preview thread error for {cmd_text!r}:\n{traceback.format_exc()}"
+                    )
+                    reply = (
+                        f"Resort preview stopped. {type(exc).__name__}: {exc}\n\n"
+                        "Gmail not touched."
+                    )
+                try:
+                    send_message(reply)
+                except Exception as se:
+                    _log_error(f"resort preview send failed: {type(se).__name__}: {se}")
+
+            threading.Thread(target=_resort_thread, daemon=True).start()
+        else:
+            try:
+                reply = handle_command(text)
+            except Exception as exc:
+                _log_error(
+                    f"handle_command exception for {text!r}:\n{traceback.format_exc()}"
+                )
+                reply = (
+                    f"Scan stopped. Error: {type(exc).__name__}: {exc}\n\n"
+                    "Gmail not touched."
+                )
+            try:
+                send_message(reply)
+            except Exception as send_exc:
+                _log_error(
+                    f"send_message failed: {type(send_exc).__name__}: {send_exc}\n"
+                    f"Reply was: {reply[:300]}"
+                )
+            print("Reply sent.")
 
     state["offset"] = newest_update_id
     save_state(state)
