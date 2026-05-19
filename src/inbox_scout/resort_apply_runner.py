@@ -118,13 +118,13 @@ def build_resort_run_message(account: str = "both") -> str:
 
     if account in ("both", "unspecified"):
         plans = [
-            _scan_one_account("primary", on_progress=_send_progress),
-            _scan_one_account("secondary", on_progress=_send_progress),
+            _scan_one_account("primary", on_progress=_send_progress, on_log=print),
+            _scan_one_account("secondary", on_progress=_send_progress, on_log=print),
         ]
     elif account == "primary":
-        plans = [_scan_one_account("primary", on_progress=_send_progress)]
+        plans = [_scan_one_account("primary", on_progress=_send_progress, on_log=print)]
     else:
-        plans = [_scan_one_account("secondary", on_progress=_send_progress)]
+        plans = [_scan_one_account("secondary", on_progress=_send_progress, on_log=print)]
 
     combined = {
         "created_at": datetime.now(timezone.utc).isoformat(),

@@ -133,7 +133,7 @@ def build_resort_candidates(classified_emails: list[dict], current_label: str) -
     return mismatches, skips
 
 
-def _scan_one_account(account: str, on_progress=None) -> dict:
+def _scan_one_account(account: str, on_progress=None, on_log=None) -> dict:
     """Scan all InboxScout labels for one account. Returns plan dict. No Gmail writes."""
     from inbox_scout.report_mode import classify_for_report
 
@@ -142,6 +142,14 @@ def _scan_one_account(account: str, on_progress=None) -> dict:
             return
         try:
             on_progress(msg)
+        except Exception:
+            pass
+
+    def _log(msg: str) -> None:
+        if on_log is None:
+            return
+        try:
+            on_log(msg)
         except Exception:
             pass
 
@@ -165,6 +173,9 @@ def _scan_one_account(account: str, on_progress=None) -> dict:
     total_in_library = sum(label_msg_counts.get(n, 0) for n in inbox_scout_labels)
     n_labels = len(inbox_scout_labels)
 
+    if n_labels > 0:
+        _log(f"[resort] {account}: scanning {n_labels} InboxScout label{'s' if n_labels != 1 else ''}")
+
     all_mismatches: list[dict] = []
     total_scanned = 0
     total_skips = {"protected": 0, "manual_review": 0, "high_risk": 0, "review_label": 0}
@@ -186,6 +197,13 @@ def _scan_one_account(account: str, on_progress=None) -> dict:
         for k in total_skips:
             total_skips[k] += skips.get(k, 0)
 
+        label_short = label_name[len(INBOX_SCOUT_PREFIX):]
+        found_so_far = len(all_mismatches)
+        _log(
+            f"[resort] {account} [{label_idx}/{n_labels}] {label_short} — "
+            f"{total_scanned} emails, {found_so_far} correction{'s' if found_so_far != 1 else ''}"
+        )
+
         # Trigger on actual email milestone OR label milestone (never depends on messagesTotal)
         email_bucket = total_scanned // _PROGRESS_INTERVAL
         label_bucket = label_idx // _PROGRESS_LABEL_INTERVAL
@@ -202,6 +220,11 @@ def _scan_one_account(account: str, on_progress=None) -> dict:
         _notify(
             f"Resort scan complete — {account}: {total_scanned} scanned{cap_note}, "
             f"{found} correction{'s' if found != 1 else ''} found"
+        )
+        _log(
+            f"[resort] {account}: done — {total_scanned} scanned"
+            + (f" (capped at {RESORT_MAX_SCAN_TOTAL})" if capped else "")
+            + f", {found} correction{'s' if found != 1 else ''} found"
         )
 
     return {
@@ -265,11 +288,11 @@ def build_resort_preview_message(account: str = "both") -> str:
     and reports mismatches. Never modifies Gmail.
     """
     if account in ("both", "unspecified"):
-        plans = [_scan_one_account("primary"), _scan_one_account("secondary")]
+        plans = [_scan_one_account("primary", on_log=print), _scan_one_account("secondary", on_log=print)]
     elif account == "primary":
-        plans = [_scan_one_account("primary")]
+        plans = [_scan_one_account("primary", on_log=print)]
     else:
-        plans = [_scan_one_account("secondary")]
+        plans = [_scan_one_account("secondary", on_log=print)]
 
     combined = {
         "created_at": datetime.now(timezone.utc).isoformat(),

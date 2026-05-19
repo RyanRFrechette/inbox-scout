@@ -279,18 +279,40 @@ class TestScanProgressCallback(unittest.TestCase):
         self.assertFalse(any("progress: 0 emails" in c for c in progress_calls))
 
     def test_preview_path_passes_no_progress(self):
-        # build_resort_preview_message must NOT call on_progress (stays silent)
+        # build_resort_preview_message must NOT pass on_progress (Telegram stays silent)
+        # but MUST pass on_log (console logging active)
         progress_calls = []
-        def fake_scan(acct, on_progress=None):
+        log_received = []
+        def fake_scan(acct, on_progress=None, on_log=None):
             if on_progress is not None:
                 progress_calls.append("LEAKED")
+            if on_log is not None:
+                log_received.append(on_log)
             return _mock_scan(acct)
         with patch("inbox_scout.resort_mode._scan_one_account", side_effect=fake_scan), \
              patch("inbox_scout.resort_mode.LATEST_RESORT_PLAN") as mock_path:
             mock_path.parent = MagicMock()
             mock_path.write_text = MagicMock()
             build_resort_preview_message(account="primary")
-        self.assertEqual(progress_calls, [], "Preview must not send progress messages")
+        self.assertEqual(progress_calls, [], "Preview must not send Telegram progress messages")
+        self.assertTrue(log_received, "Preview must wire on_log for console output")
+
+    def test_on_log_fires_per_label_and_at_completion(self):
+        # Console logger gets one line per label-with-emails plus a done line
+        labels = [f"InboxScout/Label{i}" for i in range(3)]
+        from inbox_scout import resort_mode
+        svc = _make_scan_service(labels, msgs_per_label=5)
+        log_calls = []
+        with patch.object(resort_mode, "_get_service", return_value=svc), \
+             patch("inbox_scout.report_mode.classify_for_report",
+                   return_value=[_classified_promo() for _ in range(5)]):
+            _scan_one_account("primary", on_log=log_calls.append)
+        per_label = [c for c in log_calls if "[resort] primary [" in c]
+        done = [c for c in log_calls if "done" in c]
+        self.assertEqual(len(per_label), 3, "One log line per label with emails")
+        self.assertEqual(len(done), 1, "One done line at completion")
+        self.assertIn("emails", per_label[0])
+        self.assertIn("correction", per_label[0])
 
 
 class TestBuildResortCandidates(unittest.TestCase):
