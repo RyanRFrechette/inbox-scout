@@ -115,6 +115,51 @@ class TestValidateMismatch(unittest.TestCase):
         ))
         self.assertFalse(ok)
 
+    # --- Sensitive sender/subject guard ---
+
+    def test_paypal_sender_skipped(self):
+        ok, reason = self.v(_mismatch(
+            subject="Welcome to PayPal.",
+            **{"from": "service@paypal.com"},
+        ))
+        self.assertFalse(ok)
+        self.assertIn("sensitive", reason)
+
+    def test_paypal_display_name_skipped(self):
+        ok, reason = self.v(_mismatch(
+            subject="Your PayPal receipt",
+            **{"from": "PayPal <service@paypal.com>"},
+        ))
+        self.assertFalse(ok)
+        self.assertIn("sensitive", reason)
+
+    def test_venmo_sender_skipped(self):
+        ok, reason = self.v(_mismatch(**{"from": "venmo@venmo.com"}))
+        self.assertFalse(ok)
+        self.assertIn("sensitive", reason)
+
+    def test_security_alert_subject_skipped(self):
+        ok, reason = self.v(_mismatch(subject="Security alert for your account"))
+        self.assertFalse(ok)
+        self.assertIn("sensitive", reason)
+
+    def test_non_sensitive_promo_still_passes(self):
+        ok, _ = self.v(_mismatch(
+            subject="Big Sale Today",
+            **{"from": "deals@retailer.com"},
+        ))
+        self.assertTrue(ok)
+
+    def test_sensitive_skipped_even_at_low_risk(self):
+        # PayPal with risk=10 must still be blocked
+        ok, reason = self.v(_mismatch(
+            risk_score=10,
+            subject="Welcome to PayPal.",
+            **{"from": "service@paypal.com"},
+        ))
+        self.assertFalse(ok)
+        self.assertIn("sensitive", reason)
+
 
 class TestConfirmationGate(unittest.TestCase):
     def test_no_plan_file_blocks_apply(self):

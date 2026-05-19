@@ -19,6 +19,33 @@ PLAN_MAX_AGE_MINUTES = 120
 INBOX_SCOUT_PREFIX = "InboxScout/"
 MAX_SAFE_RISK = 30
 
+_SENSITIVE_SENDER_KEYWORDS: tuple[str, ...] = (
+    "paypal", "venmo", "cashapp", "cash app", "stripe", "zelle",
+    "coinbase", "robinhood",
+    "chase", "wellsfargo", "citibank", "bankofamerica", "capital one",
+    "discover", "americanexpress", "amex", "mastercard",
+    "@irs.gov", "revenue service",
+    "billing@", "payments@", "security@", "legal@", "compliance@",
+)
+
+_SENSITIVE_SUBJECT_KEYWORDS: tuple[str, ...] = (
+    "password reset", "security alert", "verify your account",
+    "unauthorized access", "suspicious activity", "account suspended",
+    "legal notice", "two-factor",
+)
+
+
+def _is_sensitive(m: dict) -> bool:
+    sender = (m.get("from") or "").lower()
+    subject = (m.get("subject") or "").lower()
+    for term in _SENSITIVE_SENDER_KEYWORDS:
+        if term in sender:
+            return True
+    for term in _SENSITIVE_SUBJECT_KEYWORDS:
+        if term in subject:
+            return True
+    return False
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -76,6 +103,8 @@ def _validate_mismatch(m: dict) -> tuple[bool, str]:
     risk = int(m.get("risk_score") or 0)
     if risk > MAX_SAFE_RISK:
         return False, f"risk {risk} > {MAX_SAFE_RISK}"
+    if _is_sensitive(m):
+        return False, "sensitive sender/subject — manual review required"
     return True, ""
 
 
