@@ -88,6 +88,11 @@ class TestValidateMismatch(unittest.TestCase):
         ok, _ = self.v(_mismatch(risk_score=30))
         self.assertTrue(ok)
 
+    def test_protected_skipped(self):
+        ok, reason = self.v(_mismatch(protected=True))
+        self.assertFalse(ok)
+        self.assertIn("protected", reason)
+
     def test_missing_message_id_skipped(self):
         ok, reason = self.v(_mismatch(message_id=""))
         self.assertFalse(ok)
@@ -241,6 +246,74 @@ class TestResortRunMessage(unittest.TestCase):
         self.assertEqual(modify_mock.call_count, 2)
         self.assertIn("addLabelIds", modify_mock.call_args_list[0][1]["body"])
         self.assertIn("removeLabelIds", modify_mock.call_args_list[1][1]["body"])
+
+    def test_scan_error_surfaced_when_no_mismatches(self):
+        plans = [{"account": "primary", "error": "token expired", "mismatches": [],
+                  "scanned": 0, "skipped_protected": 0, "skipped_manual_review": 0,
+                  "skipped_high_risk": 0, "skipped_review_label": 0}]
+        result, svc = self._run_with_plans(plans)
+        self.assertIn("Scan failed", result)
+        self.assertIn("token expired", result)
+        self.assertIn("Gmail not touched", result)
+        svc.users.return_value.messages.return_value.modify.assert_not_called()
+
+    def test_scan_error_with_partial_mismatches_still_applies(self):
+        # One account errors, other has valid corrections — apply should proceed
+        plans_both = [
+            {"account": "primary", "error": "token expired", "mismatches": [], "scanned": 0,
+             "skipped_protected": 0, "skipped_manual_review": 0,
+             "skipped_high_risk": 0, "skipped_review_label": 0},
+        ]
+        from inbox_scout import resort_apply_runner
+        with tempfile.TemporaryDirectory() as tmpdir:
+            plan_path = Path(tmpdir) / "latest_resort_plan.json"
+            log_path = Path(tmpdir) / "resort_apply.jsonl"
+            svc = _mock_service()
+            # Manually write a plan with one errored account + one good account
+            import json as _json
+            plan_data = {
+                "created_at": __import__("datetime").datetime.now(
+                    __import__("datetime").timezone.utc).isoformat(),
+                "account_scope": "both",
+                "confirmed": False,
+                "plans": [
+                    {"account": "primary", "error": "token expired", "mismatches": [],
+                     "scanned": 0, "skipped_protected": 0, "skipped_manual_review": 0,
+                     "skipped_high_risk": 0, "skipped_review_label": 0},
+                    {"account": "secondary", "mismatches": [_mismatch()], "scanned": 1,
+                     "skipped_protected": 0, "skipped_manual_review": 0,
+                     "skipped_high_risk": 0, "skipped_review_label": 0},
+                ],
+            }
+            plan_path.write_text(_json.dumps(plan_data), encoding="utf-8")
+            with patch.object(resort_apply_runner, "LATEST_RESORT_PLAN", plan_path), \
+                 patch.object(resort_apply_runner, "RESORT_APPLY_LOG", log_path), \
+                 patch.object(resort_apply_runner, "_get_modify_service", return_value=svc):
+                result = resort_apply_runner.build_resort_apply_message()
+        # Good account corrections applied despite other account erroring
+        self.assertIn("Applied 1", result)
+
+
+class TestFetchLabelIdsFailure(unittest.TestCase):
+    def test_label_fetch_failure_reported_clearly(self):
+        from inbox_scout import resort_apply_runner
+        from unittest.mock import MagicMock
+        with tempfile.TemporaryDirectory() as tmpdir:
+            plan_path = Path(tmpdir) / "latest_resort_plan.json"
+            log_path = Path(tmpdir) / "resort_apply.jsonl"
+            plan_path.write_text(json.dumps(_make_plan(mismatches=[_mismatch()])), encoding="utf-8")
+            svc = MagicMock()
+            # labels().list().execute() raises
+            svc.users.return_value.labels.return_value.list.return_value.execute.side_effect = \
+                Exception("quota exceeded")
+            with patch.object(resort_apply_runner, "LATEST_RESORT_PLAN", plan_path), \
+                 patch.object(resort_apply_runner, "RESORT_APPLY_LOG", log_path), \
+                 patch.object(resort_apply_runner, "_get_modify_service", return_value=svc):
+                result = resort_apply_runner.build_resort_apply_message()
+        # Should report the real error, not silently pretend labels are missing
+        self.assertIn("Gmail not touched", result)
+        self.assertNotIn("not found in Gmail", result)
+        svc.users.return_value.messages.return_value.modify.assert_not_called()
 
 
 class TestNaturalIntentRouting(unittest.TestCase):

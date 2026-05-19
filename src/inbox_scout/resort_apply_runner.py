@@ -34,12 +34,9 @@ def _get_modify_service(account: str):
 
 
 def _fetch_label_ids(service) -> dict[str, str]:
-    """Return {label_name: label_id} for all labels in the account."""
-    try:
-        resp = service.users().labels().list(userId="me").execute()
-        return {lbl["name"]: lbl["id"] for lbl in resp.get("labels", [])}
-    except Exception:
-        return {}
+    """Return {label_name: label_id} for all labels in the account. Raises on failure."""
+    resp = service.users().labels().list(userId="me").execute()
+    return {lbl["name"]: lbl["id"] for lbl in resp.get("labels", [])}
 
 
 def _validate_plan() -> tuple[dict | None, str]:
@@ -64,6 +61,8 @@ def _validate_plan() -> tuple[dict | None, str]:
 def _validate_mismatch(m: dict) -> tuple[bool, str]:
     if not (m.get("message_id") or "").strip():
         return False, "missing message_id"
+    if m.get("protected"):
+        return False, "protected — skipped"
     if m.get("manual_review"):
         return False, "manual_review — skipped"
     current = (m.get("current_label") or "").strip()
@@ -99,6 +98,11 @@ def build_resort_run_message(account: str = "both") -> str:
     }
     LATEST_RESORT_PLAN.parent.mkdir(parents=True, exist_ok=True)
     LATEST_RESORT_PLAN.write_text(json.dumps(combined, indent=2), encoding="utf-8")
+
+    scan_errors = [p["error"] for p in plans if p.get("error")]
+    has_mismatches = any(p.get("mismatches") for p in plans)
+    if scan_errors and not has_mismatches:
+        return "Scan failed: " + "; ".join(scan_errors) + "\n\nGmail not touched."
 
     return build_resort_apply_message()
 
@@ -170,7 +174,22 @@ def build_resort_apply_message() -> str:
                 })
             continue
 
-        label_ids = _fetch_label_ids(service)
+        try:
+            label_ids = _fetch_label_ids(service)
+        except Exception as e:
+            for m in items:
+                subj = (m.get("subject") or "(no subject)")[:50]
+                errors.append(f"'{subj}': could not fetch Gmail labels — {e}")
+                append_jsonl(RESORT_APPLY_LOG, {
+                    "event": "resort_apply_error",
+                    "run_id": run_id,
+                    "timestamp": _now_iso(),
+                    "account": account,
+                    "message_id": m.get("message_id"),
+                    "error": f"label fetch failed: {e}",
+                    "gmail_changed": False,
+                })
+            continue
 
         for m in items:
             message_id = m["message_id"]
