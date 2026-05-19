@@ -14,7 +14,8 @@ from inbox_scout.paths import LATEST_RESORT_PLAN
 INBOX_SCOUT_PREFIX = "InboxScout/"
 CAP_PER_LABEL = 10  # Max messages to fetch per label per account
 _RISK_THRESHOLD = 30
-_PROGRESS_INTERVAL = 50  # Send a Telegram progress update every N emails processed
+_PROGRESS_INTERVAL = 50       # Send progress every N actual emails processed
+_PROGRESS_LABEL_INTERVAL = 5  # Also send progress every N labels (fallback when emails are sparse)
 
 # Labels that are manual-review buckets — never flag as mismatches
 _SKIP_CURRENT_LABELS = frozenset({
@@ -149,17 +150,19 @@ def _scan_one_account(account: str, on_progress=None) -> dict:
     n_labels = len(inbox_scout_labels)
 
     if n_labels > 0:
-        start_msg = f"Resort scan — {account}: {total_to_scan} emails across {n_labels} labels"
-        if total_in_library > total_to_scan:
-            start_msg += f" ({total_in_library:,} total in library)"
+        # Use label count only — messagesTotal is unreliable (can be 0 for populated labels)
+        start_msg = f"Resort scan — {account}: {n_labels} label{'s' if n_labels != 1 else ''}"
+        if total_in_library > 0:
+            start_msg += f" ({total_in_library:,} in library)"
         _notify(start_msg)
 
     all_mismatches: list[dict] = []
     total_scanned = 0
     total_skips = {"protected": 0, "manual_review": 0, "high_risk": 0, "review_label": 0}
-    _last_progress_bucket = 0
+    _last_email_bucket = 0
+    _last_label_bucket = 0
 
-    for label_name in inbox_scout_labels:
+    for label_idx, label_name in enumerate(inbox_scout_labels, start=1):
         emails = _fetch_labeled_emails(service, label_name)
         if not emails:
             continue
@@ -170,12 +173,13 @@ def _scan_one_account(account: str, on_progress=None) -> dict:
         for k in total_skips:
             total_skips[k] += skips.get(k, 0)
 
-        if total_to_scan > 0:
-            bucket = total_scanned // _PROGRESS_INTERVAL
-            if bucket > _last_progress_bucket:
-                _last_progress_bucket = bucket
-                pct = int(total_scanned / total_to_scan * 100)
-                _notify(f"Resort progress: {total_scanned}/{total_to_scan} — {pct}%")
+        # Trigger on actual email milestone OR label milestone (never depends on messagesTotal)
+        email_bucket = total_scanned // _PROGRESS_INTERVAL
+        label_bucket = label_idx // _PROGRESS_LABEL_INTERVAL
+        if email_bucket > _last_email_bucket or label_bucket > _last_label_bucket:
+            _last_email_bucket = email_bucket
+            _last_label_bucket = label_bucket
+            _notify(f"Resort progress: {total_scanned} emails — {label_idx}/{n_labels} labels")
 
     if n_labels > 0:
         found = len(all_mismatches)

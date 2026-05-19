@@ -64,12 +64,14 @@ def _mock_scan(account: str) -> dict:
     }
 
 
-def _make_scan_service(label_names, msgs_per_label=10):
-    """Build a mock Gmail service for _scan_one_account tests."""
+def _make_scan_service(label_names, msgs_per_label=10, metadata_total=None):
+    """Build a mock Gmail service for _scan_one_account tests.
+    metadata_total overrides messagesTotal in label metadata (simulates stale/zero counts)."""
     svc = MagicMock()
+    reported = metadata_total if metadata_total is not None else msgs_per_label
     svc.users.return_value.labels.return_value.list.return_value.execute.return_value = {
         "labels": [
-            {"name": n, "id": f"id_{i}", "messagesTotal": msgs_per_label}
+            {"name": n, "id": f"id_{i}", "messagesTotal": reported}
             for i, n in enumerate(label_names)
         ]
     }
@@ -121,12 +123,19 @@ class TestScanProgressCallback(unittest.TestCase):
         calls = self._run(labels, msgs_per_label=5)
         self.assertTrue(any("Resort scan" in c and "primary" in c for c in calls))
 
-    def test_start_message_includes_total_to_scan(self):
+    def test_start_message_shows_label_count(self):
+        # Use metadata_total=0 so no library note is appended; start must show label count only
         labels = [f"InboxScout/Label{i}" for i in range(3)]
-        calls = self._run(labels, msgs_per_label=5)
+        from inbox_scout import resort_mode
+        svc = _make_scan_service(labels, msgs_per_label=5, metadata_total=0)
+        calls = []
+        with patch.object(resort_mode, "_get_service", return_value=svc), \
+             patch("inbox_scout.report_mode.classify_for_report",
+                   return_value=[_classified_promo() for _ in range(5)]):
+            _scan_one_account("primary", on_progress=calls.append)
         start = next(c for c in calls if "Resort scan" in c)
-        # 3 labels × 5 emails = 15 to scan
-        self.assertIn("15", start)
+        self.assertIn("3 labels", start)
+        self.assertNotIn("emails", start)
 
     def test_completion_message_sent(self):
         labels = [f"InboxScout/Label{i}" for i in range(2)]
@@ -154,12 +163,29 @@ class TestScanProgressCallback(unittest.TestCase):
             result = _scan_one_account("primary", on_progress=None)
         self.assertIn("scanned", result)
 
-    def test_library_size_shown_when_larger_than_scan_cap(self):
-        # messagesTotal=100 per label but CAP_PER_LABEL=10 → library note shown
+    def test_library_size_shown_when_messages_total_nonzero(self):
+        # messagesTotal=100 → library note appended (any non-zero is informative)
         labels = ["InboxScout/Newsletter"]
         calls = self._run(labels, msgs_per_label=100)
         start = next(c for c in calls if "Resort scan" in c)
-        self.assertIn("total in library", start)
+        self.assertIn("in library", start)
+
+    def test_progress_fires_when_messages_total_is_zero(self):
+        # Regression: messagesTotal=0 (stale/unreliable) but emails actually fetched
+        # Progress must still fire based on actual fetched count, not messagesTotal
+        labels = [f"InboxScout/Label{i}" for i in range(6)]
+        items = [_classified_promo() for _ in range(10)]
+        from inbox_scout import resort_mode
+        svc = _make_scan_service(labels, msgs_per_label=10, metadata_total=0)
+        progress_calls = []
+        with patch.object(resort_mode, "_get_service", return_value=svc), \
+             patch("inbox_scout.report_mode.classify_for_report", return_value=items):
+            _scan_one_account("primary", on_progress=progress_calls.append)
+        # Start message must not say "0 emails"
+        start = next(c for c in progress_calls if "Resort scan" in c)
+        self.assertNotIn("0 emails", start)
+        # Progress must still fire (60 emails fetched → crosses 50-email threshold)
+        self.assertTrue(any("Resort progress:" in c for c in progress_calls))
 
     def test_preview_path_passes_no_progress(self):
         # build_resort_preview_message must NOT call on_progress (stays silent)
