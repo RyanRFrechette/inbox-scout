@@ -217,7 +217,7 @@ class TestFetchLabeledEmailsPagination(unittest.TestCase):
 
 
 class TestScanProgressCallback(unittest.TestCase):
-    """Verify _scan_one_account fires on_progress at start, milestones, and completion."""
+    """Verify _scan_one_account fires on_progress at milestones and completion (no start message)."""
 
     def _run(self, label_names, msgs_per_label=10, classified_items=None):
         from inbox_scout import resort_mode
@@ -229,24 +229,12 @@ class TestScanProgressCallback(unittest.TestCase):
             _scan_one_account("primary", on_progress=progress_calls.append)
         return progress_calls
 
-    def test_start_message_sent_with_label_count(self):
+    def test_no_start_message_sent_before_scan(self):
+        # Atlas already sent an ack; scan must not send a back-to-back start message
         labels = [f"InboxScout/Label{i}" for i in range(3)]
         calls = self._run(labels, msgs_per_label=5)
-        self.assertTrue(any("Resort scan" in c and "primary" in c for c in calls))
-
-    def test_start_message_shows_label_count(self):
-        # Use metadata_total=0 so no library note is appended; start must show label count only
-        labels = [f"InboxScout/Label{i}" for i in range(3)]
-        from inbox_scout import resort_mode
-        svc = _make_scan_service(labels, msgs_per_label=5, metadata_total=0)
-        calls = []
-        with patch.object(resort_mode, "_get_service", return_value=svc), \
-             patch("inbox_scout.report_mode.classify_for_report",
-                   return_value=[_classified_promo() for _ in range(5)]):
-            _scan_one_account("primary", on_progress=calls.append)
-        start = next(c for c in calls if "Resort scan" in c)
-        self.assertIn("3 labels", start)
-        self.assertNotIn("emails", start)
+        non_completion = [c for c in calls if "Resort scan" in c and "complete" not in c.lower()]
+        self.assertEqual(non_completion, [], f"Unexpected start message(s): {non_completion}")
 
     def test_completion_message_sent(self):
         labels = [f"InboxScout/Label{i}" for i in range(2)]
@@ -254,13 +242,13 @@ class TestScanProgressCallback(unittest.TestCase):
         self.assertTrue(any("complete" in c.lower() for c in calls))
 
     def test_progress_milestone_sent_when_enough_emails(self):
-        # 6 labels × 10 emails = 60 → crosses _PROGRESS_INTERVAL (50)
-        labels = [f"InboxScout/Label{i}" for i in range(6)]
+        # 26 labels × 10 emails = 260 → crosses _PROGRESS_INTERVAL (250)
+        labels = [f"InboxScout/Label{i}" for i in range(26)]
         calls = self._run(labels, msgs_per_label=10)
         self.assertTrue(any("Resort progress:" in c for c in calls))
 
     def test_no_progress_milestone_below_interval(self):
-        # 3 labels × 10 emails = 30 → below _PROGRESS_INTERVAL (50), no mid-scan update
+        # 3 labels × 10 emails = 30 → below _PROGRESS_INTERVAL (250), no mid-scan update
         labels = [f"InboxScout/Label{i}" for i in range(3)]
         calls = self._run(labels, msgs_per_label=10)
         self.assertFalse(any("Resort progress:" in c for c in calls))
@@ -274,17 +262,10 @@ class TestScanProgressCallback(unittest.TestCase):
             result = _scan_one_account("primary", on_progress=None)
         self.assertIn("scanned", result)
 
-    def test_library_size_shown_when_messages_total_nonzero(self):
-        # messagesTotal=100 → library note appended (any non-zero is informative)
-        labels = ["InboxScout/Newsletter"]
-        calls = self._run(labels, msgs_per_label=100)
-        start = next(c for c in calls if "Resort scan" in c)
-        self.assertIn("in library", start)
-
     def test_progress_fires_when_messages_total_is_zero(self):
         # Regression: messagesTotal=0 (stale/unreliable) but emails actually fetched
         # Progress must still fire based on actual fetched count, not messagesTotal
-        labels = [f"InboxScout/Label{i}" for i in range(6)]
+        labels = [f"InboxScout/Label{i}" for i in range(26)]
         items = [_classified_promo() for _ in range(10)]
         from inbox_scout import resort_mode
         svc = _make_scan_service(labels, msgs_per_label=10, metadata_total=0)
@@ -292,11 +273,10 @@ class TestScanProgressCallback(unittest.TestCase):
         with patch.object(resort_mode, "_get_service", return_value=svc), \
              patch("inbox_scout.report_mode.classify_for_report", return_value=items):
             _scan_one_account("primary", on_progress=progress_calls.append)
-        # Start message must not say "0 emails"
-        start = next(c for c in progress_calls if "Resort scan" in c)
-        self.assertNotIn("0 emails", start)
-        # Progress must still fire (60 emails fetched → crosses 50-email threshold)
+        # Progress must still fire (260 emails → crosses 250-email threshold)
         self.assertTrue(any("Resort progress:" in c for c in progress_calls))
+        # No progress message should report 0 emails scanned
+        self.assertFalse(any("progress: 0 emails" in c for c in progress_calls))
 
     def test_preview_path_passes_no_progress(self):
         # build_resort_preview_message must NOT call on_progress (stays silent)

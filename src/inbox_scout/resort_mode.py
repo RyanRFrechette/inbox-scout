@@ -15,8 +15,8 @@ INBOX_SCOUT_PREFIX = "InboxScout/"
 RESORT_SCAN_PAGE_SIZE = 100   # Messages per Gmail API page (max 500)
 RESORT_MAX_SCAN_TOTAL = 2000  # Hard cap: total emails scanned per account per run
 _RISK_THRESHOLD = 30
-_PROGRESS_INTERVAL = 50       # Send progress every N actual emails processed
-_PROGRESS_LABEL_INTERVAL = 5  # Also send progress every N labels (fallback when emails are sparse)
+_PROGRESS_INTERVAL = 250      # Send progress every N actual emails processed
+_PROGRESS_LABEL_INTERVAL = 25 # Also send progress every N labels (fallback when emails are sparse)
 
 # Labels that are manual-review buckets — never flag as mismatches
 _SKIP_CURRENT_LABELS = frozenset({
@@ -164,13 +164,6 @@ def _scan_one_account(account: str, on_progress=None) -> dict:
     label_msg_counts = {lbl["name"]: lbl.get("messagesTotal", 0) for lbl in all_labels}
     total_in_library = sum(label_msg_counts.get(n, 0) for n in inbox_scout_labels)
     n_labels = len(inbox_scout_labels)
-
-    if n_labels > 0:
-        # Use label count only — messagesTotal is unreliable (can be 0 for populated labels)
-        start_msg = f"Resort scan — {account}: {n_labels} label{'s' if n_labels != 1 else ''}"
-        if total_in_library > 0:
-            start_msg += f" ({total_in_library:,} in library)"
-        _notify(start_msg)
 
     all_mismatches: list[dict] = []
     total_scanned = 0
