@@ -168,5 +168,43 @@ class TestResortPreviewAccountScoping(unittest.TestCase):
         self.assertIn("Nothing was changed", result)
 
 
+class TestResortRouting(unittest.TestCase):
+    """Verify natural_intent routing: resort phrases win before status/audit catch-all."""
+
+    def _route(self, text: str) -> str:
+        """Return the function name that handle_natural_message would call for text."""
+        from unittest.mock import patch, MagicMock
+        import inbox_scout.natural_intent as ni
+
+        resort_mock = MagicMock(return_value="__resort__")
+        status_mock = MagicMock(return_value="__status__")
+
+        with patch.object(ni, "build_resort_preview_message", resort_mock, create=True), \
+             patch("inbox_scout.resort_mode.build_resort_preview_message", resort_mock), \
+             patch("inbox_scout.natural_intent.build_status_message", status_mock):
+            result = ni.handle_natural_message(text)
+
+        if resort_mock.called:
+            return "resort"
+        if status_mock.called:
+            return "status"
+        return result
+
+    def test_audit_my_archives_routes_to_resort(self):
+        self.assertEqual(self._route("audit my archives"), "resort")
+
+    def test_audit_sorted_folders_routes_to_resort(self):
+        self.assertEqual(self._route("audit sorted folders"), "resort")
+
+    def test_resort_my_sorted_emails_routes_to_resort(self):
+        self.assertEqual(self._route("resort my sorted emails"), "resort")
+
+    def test_inbox_status_routes_to_status(self):
+        self.assertEqual(self._route("inbox status"), "status")
+
+    def test_how_is_my_inbox_routes_to_status(self):
+        self.assertEqual(self._route("how is my inbox"), "status")
+
+
 if __name__ == "__main__":
     unittest.main()

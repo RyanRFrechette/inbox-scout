@@ -589,6 +589,25 @@ def handle_natural_message(text: str) -> str:
     }:
         return build_still_needs_review_message()
 
+    if any(phrase in msg for phrase in [
+        "resort my sorted emails",
+        "resort my emails",
+        "resort sorted emails",
+        "resort everything",
+        "audit my archives",
+        "check if anything is in the wrong folder",
+        "are my emails sorted correctly",
+        "resort preview",
+        "show resort preview",
+        "audit sorted folders",
+        "check my sorted folders",
+    ]):
+        from inbox_scout.resort_mode import build_resort_preview_message
+        _scope = _parse_account(msg)
+        if _scope == "unspecified":
+            _scope = "both"
+        return build_resort_preview_message(account=_scope)
+
     if any(phrase in msg for phrase in ["status", "audit", "how is my inbox", "inbox status"]):
         return build_status_message()
 
@@ -694,25 +713,6 @@ def handle_natural_message(text: str) -> str:
 
     if any(phrase in msg for phrase in ["queue", "show emails", "show my emails", "latest batch"]):
         return queue_summary()
-
-    if any(phrase in msg for phrase in [
-        "resort my sorted emails",
-        "resort my emails",
-        "resort sorted emails",
-        "resort everything",
-        "audit my archives",
-        "check if anything is in the wrong folder",
-        "are my emails sorted correctly",
-        "resort preview",
-        "show resort preview",
-        "audit sorted folders",
-        "check my sorted folders",
-    ]):
-        from inbox_scout.resort_mode import build_resort_preview_message
-        _scope = _parse_account(msg)
-        if _scope == "unspecified":
-            _scope = "both"
-        return build_resort_preview_message(account=_scope)
 
     if any(phrase in msg for phrase in [
         "continue sorting",
