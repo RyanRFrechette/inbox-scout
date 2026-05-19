@@ -90,6 +90,19 @@ def _make_scan_service(label_names, msgs_per_label=10, metadata_total=None):
     return svc
 
 
+def _make_get_side_effect():
+    """Returns a callable that always returns a valid message metadata response."""
+    resp = {
+        "payload": {"headers": [
+            {"name": "From", "value": "promo@example.com"},
+            {"name": "Subject", "value": "Big Sale"},
+            {"name": "Date", "value": "Mon, 1 Jan 2024"},
+        ]},
+        "snippet": "sale snippet",
+    }
+    return lambda *a, **kw: MagicMock(**{"execute.return_value": resp})
+
+
 def _classified_promo():
     return {
         "message_id": "msg_x",
@@ -103,6 +116,104 @@ def _classified_promo():
             "protected": False,
         },
     }
+
+
+class TestFetchLabeledEmailsPagination(unittest.TestCase):
+    """Verify _fetch_labeled_emails paginates through multiple Gmail API pages."""
+
+    def _make_paginated_service(self, pages: list[list[str]]):
+        """pages = list of lists of message IDs per page. Last page has no nextPageToken."""
+        svc = MagicMock()
+        list_responses = []
+        for i, page_ids in enumerate(pages):
+            resp = {"messages": [{"id": mid} for mid in page_ids]}
+            if i < len(pages) - 1:
+                resp["nextPageToken"] = f"tok_{i}"
+            list_responses.append(resp)
+        svc.users.return_value.messages.return_value.list.return_value.execute.side_effect = (
+            list_responses
+        )
+        # messages.get always returns the same stub
+        get_resp = {
+            "payload": {"headers": [
+                {"name": "From", "value": "a@b.com"},
+                {"name": "Subject", "value": "Test"},
+                {"name": "Date", "value": "Mon, 1 Jan 2024"},
+            ]},
+            "snippet": "test",
+        }
+        svc.users.return_value.messages.return_value.get.return_value.execute.return_value = get_resp
+        return svc
+
+    def test_fetches_all_pages(self):
+        from inbox_scout.resort_mode import _fetch_labeled_emails
+        svc = self._make_paginated_service([["msg1", "msg2"], ["msg3", "msg4"]])
+        result = _fetch_labeled_emails(svc, "InboxScout/Newsletter", remaining_cap=100)
+        self.assertEqual(len(result), 4)
+        self.assertEqual([r["message_id"] for r in result], ["msg1", "msg2", "msg3", "msg4"])
+
+    def test_stops_at_no_next_page(self):
+        from inbox_scout.resort_mode import _fetch_labeled_emails
+        svc = self._make_paginated_service([["msg1", "msg2"]])
+        result = _fetch_labeled_emails(svc, "InboxScout/Newsletter", remaining_cap=100)
+        self.assertEqual(len(result), 2)
+        # Only one list() call — no second page requested
+        self.assertEqual(
+            svc.users.return_value.messages.return_value.list.return_value.execute.call_count, 1
+        )
+
+    def test_respects_remaining_cap_mid_page(self):
+        from inbox_scout.resort_mode import _fetch_labeled_emails
+        svc = self._make_paginated_service([["msg1", "msg2", "msg3", "msg4", "msg5"]])
+        result = _fetch_labeled_emails(svc, "InboxScout/Newsletter", remaining_cap=3)
+        self.assertEqual(len(result), 3)
+
+    def test_respects_remaining_cap_across_pages(self):
+        from inbox_scout.resort_mode import _fetch_labeled_emails
+        svc = self._make_paginated_service([["msg1", "msg2"], ["msg3", "msg4"], ["msg5"]])
+        result = _fetch_labeled_emails(svc, "InboxScout/Newsletter", remaining_cap=3)
+        self.assertEqual(len(result), 3)
+        # Should stop fetching after cap — not all 3 pages requested
+        list_execute_count = (
+            svc.users.return_value.messages.return_value.list.return_value.execute.call_count
+        )
+        self.assertLessEqual(list_execute_count, 2)
+
+    def test_three_page_scan_returns_all(self):
+        from inbox_scout.resort_mode import _fetch_labeled_emails
+        svc = self._make_paginated_service([
+            ["a1", "a2", "a3"],
+            ["b1", "b2", "b3"],
+            ["c1", "c2"],
+        ])
+        result = _fetch_labeled_emails(svc, "InboxScout/Newsletter", remaining_cap=500)
+        self.assertEqual(len(result), 8)
+
+    def test_scan_account_reports_capped_in_completion(self):
+        from inbox_scout import resort_mode
+        labels = ["InboxScout/Newsletter"]
+        svc = _make_scan_service(labels, msgs_per_label=5)
+        items = [_classified_promo() for _ in range(5)]
+        progress_calls = []
+        with patch.object(resort_mode, "_get_service", return_value=svc), \
+             patch("inbox_scout.report_mode.classify_for_report", return_value=items), \
+             patch.object(resort_mode, "RESORT_MAX_SCAN_TOTAL", 3):
+            _scan_one_account("primary", on_progress=progress_calls.append)
+        complete = next(c for c in progress_calls if "complete" in c.lower())
+        self.assertIn("cap", complete.lower())
+
+    def test_scan_account_not_capped_reports_no_cap(self):
+        from inbox_scout import resort_mode
+        labels = ["InboxScout/Newsletter"]
+        svc = _make_scan_service(labels, msgs_per_label=5)
+        items = [_classified_promo() for _ in range(5)]
+        progress_calls = []
+        with patch.object(resort_mode, "_get_service", return_value=svc), \
+             patch("inbox_scout.report_mode.classify_for_report", return_value=items):
+            result = _scan_one_account("primary", on_progress=progress_calls.append)
+        self.assertFalse(result.get("capped"))
+        complete = next(c for c in progress_calls if "complete" in c.lower())
+        self.assertNotIn("cap", complete.lower())
 
 
 class TestScanProgressCallback(unittest.TestCase):

@@ -12,7 +12,8 @@ from inbox_scout.autopilot_cleanup import _pick_inboxscout_label, CATEGORY_TO_LA
 from inbox_scout.paths import LATEST_RESORT_PLAN
 
 INBOX_SCOUT_PREFIX = "InboxScout/"
-CAP_PER_LABEL = 10  # Max messages to fetch per label per account
+RESORT_SCAN_PAGE_SIZE = 100   # Messages per Gmail API page (max 500)
+RESORT_MAX_SCAN_TOTAL = 2000  # Hard cap: total emails scanned per account per run
 _RISK_THRESHOLD = 30
 _PROGRESS_INTERVAL = 50       # Send progress every N actual emails processed
 _PROGRESS_LABEL_INTERVAL = 5  # Also send progress every N labels (fallback when emails are sparse)
@@ -29,37 +30,53 @@ def _get_service(account: str):
     return get_gmail_service(mode="readonly", account=account)
 
 
-def _fetch_labeled_emails(service, label_name: str) -> list[dict]:
-    """Fetch up to CAP_PER_LABEL message metadata for a given InboxScout label."""
-    try:
-        resp = service.users().messages().list(
-            userId="me",
-            q=f'label:"{label_name}"',
-            maxResults=CAP_PER_LABEL,
-        ).execute()
-    except Exception:
-        return []
-
-    messages = resp.get("messages", [])
-    result = []
-    for msg in messages:
+def _fetch_labeled_emails(service, label_name: str, remaining_cap: int) -> list[dict]:
+    """Fetch message metadata for a label, paginating until cap or no more pages."""
+    result: list[dict] = []
+    page_token = None
+    while remaining_cap > 0:
         try:
-            detail = service.users().messages().get(
-                userId="me",
-                id=msg["id"],
-                format="metadata",
-                metadataHeaders=["From", "Subject", "Date"],
-            ).execute()
-            hdrs = {h["name"]: h["value"] for h in detail.get("payload", {}).get("headers", [])}
-            result.append({
-                "message_id": msg["id"],
-                "from": hdrs.get("From", ""),
-                "subject": hdrs.get("Subject", "(no subject)"),
-                "date": hdrs.get("Date", ""),
-                "snippet": detail.get("snippet", ""),
-            })
+            kwargs: dict = {
+                "userId": "me",
+                "q": f'label:"{label_name}"',
+                "maxResults": min(RESORT_SCAN_PAGE_SIZE, remaining_cap),
+            }
+            if page_token:
+                kwargs["pageToken"] = page_token
+            resp = service.users().messages().list(**kwargs).execute()
         except Exception:
-            pass
+            break
+
+        messages = resp.get("messages", [])
+        if not messages:
+            break
+
+        for msg in messages:
+            if remaining_cap <= 0:
+                break
+            try:
+                detail = service.users().messages().get(
+                    userId="me",
+                    id=msg["id"],
+                    format="metadata",
+                    metadataHeaders=["From", "Subject", "Date"],
+                ).execute()
+                hdrs = {h["name"]: h["value"] for h in detail.get("payload", {}).get("headers", [])}
+                result.append({
+                    "message_id": msg["id"],
+                    "from": hdrs.get("From", ""),
+                    "subject": hdrs.get("Subject", "(no subject)"),
+                    "date": hdrs.get("Date", ""),
+                    "snippet": detail.get("snippet", ""),
+                })
+                remaining_cap -= 1
+            except Exception:
+                pass
+
+        page_token = resp.get("nextPageToken")
+        if not page_token:
+            break
+
     return result
 
 
@@ -146,7 +163,6 @@ def _scan_one_account(account: str, on_progress=None) -> dict:
 
     label_msg_counts = {lbl["name"]: lbl.get("messagesTotal", 0) for lbl in all_labels}
     total_in_library = sum(label_msg_counts.get(n, 0) for n in inbox_scout_labels)
-    total_to_scan = sum(min(label_msg_counts.get(n, 0), CAP_PER_LABEL) for n in inbox_scout_labels)
     n_labels = len(inbox_scout_labels)
 
     if n_labels > 0:
@@ -161,11 +177,15 @@ def _scan_one_account(account: str, on_progress=None) -> dict:
     total_skips = {"protected": 0, "manual_review": 0, "high_risk": 0, "review_label": 0}
     _last_email_bucket = 0
     _last_label_bucket = 0
+    remaining_cap = RESORT_MAX_SCAN_TOTAL
 
     for label_idx, label_name in enumerate(inbox_scout_labels, start=1):
-        emails = _fetch_labeled_emails(service, label_name)
+        if remaining_cap <= 0:
+            break
+        emails = _fetch_labeled_emails(service, label_name, remaining_cap=remaining_cap)
         if not emails:
             continue
+        remaining_cap -= len(emails)
         classified = classify_for_report(emails)
         total_scanned += len(classified)
         mismatches, skips = build_resort_candidates(classified, label_name)
@@ -181,10 +201,13 @@ def _scan_one_account(account: str, on_progress=None) -> dict:
             _last_label_bucket = label_bucket
             _notify(f"Resort progress: {total_scanned} emails — {label_idx}/{n_labels} labels")
 
+    capped = remaining_cap <= 0
+
     if n_labels > 0:
         found = len(all_mismatches)
+        cap_note = f" (cap: {RESORT_MAX_SCAN_TOTAL})" if capped else ""
         _notify(
-            f"Resort scan complete — {account}: {total_scanned} scanned, "
+            f"Resort scan complete — {account}: {total_scanned} scanned{cap_note}, "
             f"{found} correction{'s' if found != 1 else ''} found"
         )
 
@@ -192,7 +215,7 @@ def _scan_one_account(account: str, on_progress=None) -> dict:
         "account": account,
         "scanned": total_scanned,
         "total_in_library": total_in_library,
-        "total_to_scan": total_to_scan,
+        "capped": capped,
         "mismatches": all_mismatches,
         "skipped_protected": total_skips["protected"],
         "skipped_manual_review": total_skips["manual_review"],
