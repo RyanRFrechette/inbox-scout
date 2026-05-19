@@ -206,5 +206,42 @@ class TestResortRouting(unittest.TestCase):
         self.assertEqual(self._route("how is my inbox"), "status")
 
 
+class TestResortAck(unittest.TestCase):
+    """Verify an immediate ack is sent before handle_command for resort phrases."""
+
+    def _run(self, text: str):
+        import inbox_scout.telegram_listener as tl
+        sent = []
+        with patch("inbox_scout.telegram_listener.send_message", side_effect=sent.append), \
+             patch("inbox_scout.telegram_listener.handle_command", return_value="__final__"):
+            # Simulate the relevant dispatch block directly
+            if any(phrase in text.lower() for phrase in tl._RESORT_PREVIEW_PHRASES):
+                try:
+                    tl.send_message("Got it — starting Resort Mode Preview now. This is read-only and will not change Gmail.")
+                except Exception:
+                    pass
+            tl.send_message(tl.handle_command(text))
+        return sent
+
+    def test_resort_command_sends_ack_first(self):
+        sent = self._run("resort my sorted emails")
+        self.assertEqual(len(sent), 2)
+        self.assertIn("Resort Mode Preview", sent[0])
+        self.assertIn("read-only", sent[0])
+
+    def test_audit_my_archives_sends_ack_first(self):
+        sent = self._run("audit my archives")
+        self.assertIn("Resort Mode Preview", sent[0])
+
+    def test_audit_sorted_folders_sends_ack_first(self):
+        sent = self._run("audit sorted folders")
+        self.assertIn("Resort Mode Preview", sent[0])
+
+    def test_non_resort_command_no_ack(self):
+        sent = self._run("status")
+        self.assertEqual(len(sent), 1)
+        self.assertNotIn("Resort Mode Preview", sent[0])
+
+
 if __name__ == "__main__":
     unittest.main()

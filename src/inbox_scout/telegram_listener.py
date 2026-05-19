@@ -22,6 +22,20 @@ STATE_PATH = PROJECT_ROOT / "config" / "telegram_listener_state.json"
 LATEST_QUEUE = PROJECT_ROOT / "data" / "review_queue" / "latest_queue.json"
 LOG_PATH = PROJECT_ROOT / "data" / "logs" / "telegram_watch.log"
 
+_RESORT_PREVIEW_PHRASES = [
+    "resort my sorted emails",
+    "resort my emails",
+    "resort sorted emails",
+    "resort everything",
+    "audit my archives",
+    "check if anything is in the wrong folder",
+    "are my emails sorted correctly",
+    "resort preview",
+    "show resort preview",
+    "audit sorted folders",
+    "check my sorted folders",
+]
+
 
 def _log_error(msg: str) -> None:
     LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -208,6 +222,11 @@ def run_once() -> None:
             continue
 
         print(f"Command received: {text}")
+        if any(phrase in text.lower() for phrase in _RESORT_PREVIEW_PHRASES):
+            try:
+                send_message("Got it — starting Resort Mode Preview now. This is read-only and will not change Gmail.")
+            except Exception:
+                pass
         try:
             reply = handle_command(text)
         except Exception as exc:
