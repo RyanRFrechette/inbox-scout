@@ -20,7 +20,7 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from inbox_scout.resort_mode import build_resort_candidates, build_resort_preview_message
+from inbox_scout.resort_mode import build_resort_candidates, build_resort_preview_message, _scan_one_account
 
 
 def _classified(**ai_overrides):
@@ -62,6 +62,118 @@ def _mock_scan(account: str) -> dict:
         "skipped_high_risk": 0,
         "skipped_review_label": 0,
     }
+
+
+def _make_scan_service(label_names, msgs_per_label=10):
+    """Build a mock Gmail service for _scan_one_account tests."""
+    svc = MagicMock()
+    svc.users.return_value.labels.return_value.list.return_value.execute.return_value = {
+        "labels": [
+            {"name": n, "id": f"id_{i}", "messagesTotal": msgs_per_label}
+            for i, n in enumerate(label_names)
+        ]
+    }
+    msg_ids = [{"id": f"msg_{j}"} for j in range(msgs_per_label)]
+    svc.users.return_value.messages.return_value.list.return_value.execute.return_value = {
+        "messages": msg_ids
+    }
+    svc.users.return_value.messages.return_value.get.return_value.execute.return_value = {
+        "payload": {"headers": [
+            {"name": "From", "value": "promo@example.com"},
+            {"name": "Subject", "value": "Big Sale"},
+            {"name": "Date", "value": "Mon, 1 Jan 2024"},
+        ]},
+        "snippet": "sale snippet",
+    }
+    return svc
+
+
+def _classified_promo():
+    return {
+        "message_id": "msg_x",
+        "from": "promo@example.com",
+        "subject": "Big Sale",
+        "snippet": "sale snippet",
+        "ai_classification": {
+            "category": "Promotion",
+            "risk_score": 5,
+            "manual_review": False,
+            "protected": False,
+        },
+    }
+
+
+class TestScanProgressCallback(unittest.TestCase):
+    """Verify _scan_one_account fires on_progress at start, milestones, and completion."""
+
+    def _run(self, label_names, msgs_per_label=10, classified_items=None):
+        from inbox_scout import resort_mode
+        svc = _make_scan_service(label_names, msgs_per_label)
+        items = classified_items or [_classified_promo() for _ in range(msgs_per_label)]
+        progress_calls = []
+        with patch.object(resort_mode, "_get_service", return_value=svc), \
+             patch("inbox_scout.report_mode.classify_for_report", return_value=items):
+            _scan_one_account("primary", on_progress=progress_calls.append)
+        return progress_calls
+
+    def test_start_message_sent_with_label_count(self):
+        labels = [f"InboxScout/Label{i}" for i in range(3)]
+        calls = self._run(labels, msgs_per_label=5)
+        self.assertTrue(any("Resort scan" in c and "primary" in c for c in calls))
+
+    def test_start_message_includes_total_to_scan(self):
+        labels = [f"InboxScout/Label{i}" for i in range(3)]
+        calls = self._run(labels, msgs_per_label=5)
+        start = next(c for c in calls if "Resort scan" in c)
+        # 3 labels × 5 emails = 15 to scan
+        self.assertIn("15", start)
+
+    def test_completion_message_sent(self):
+        labels = [f"InboxScout/Label{i}" for i in range(2)]
+        calls = self._run(labels, msgs_per_label=5)
+        self.assertTrue(any("complete" in c.lower() for c in calls))
+
+    def test_progress_milestone_sent_when_enough_emails(self):
+        # 6 labels × 10 emails = 60 → crosses _PROGRESS_INTERVAL (50)
+        labels = [f"InboxScout/Label{i}" for i in range(6)]
+        calls = self._run(labels, msgs_per_label=10)
+        self.assertTrue(any("Resort progress:" in c for c in calls))
+
+    def test_no_progress_milestone_below_interval(self):
+        # 3 labels × 10 emails = 30 → below _PROGRESS_INTERVAL (50), no mid-scan update
+        labels = [f"InboxScout/Label{i}" for i in range(3)]
+        calls = self._run(labels, msgs_per_label=10)
+        self.assertFalse(any("Resort progress:" in c for c in calls))
+
+    def test_no_crash_when_on_progress_is_none(self):
+        from inbox_scout import resort_mode
+        labels = ["InboxScout/Newsletter"]
+        svc = _make_scan_service(labels, msgs_per_label=2)
+        with patch.object(resort_mode, "_get_service", return_value=svc), \
+             patch("inbox_scout.report_mode.classify_for_report", return_value=[_classified_promo()]):
+            result = _scan_one_account("primary", on_progress=None)
+        self.assertIn("scanned", result)
+
+    def test_library_size_shown_when_larger_than_scan_cap(self):
+        # messagesTotal=100 per label but CAP_PER_LABEL=10 → library note shown
+        labels = ["InboxScout/Newsletter"]
+        calls = self._run(labels, msgs_per_label=100)
+        start = next(c for c in calls if "Resort scan" in c)
+        self.assertIn("total in library", start)
+
+    def test_preview_path_passes_no_progress(self):
+        # build_resort_preview_message must NOT call on_progress (stays silent)
+        progress_calls = []
+        def fake_scan(acct, on_progress=None):
+            if on_progress is not None:
+                progress_calls.append("LEAKED")
+            return _mock_scan(acct)
+        with patch("inbox_scout.resort_mode._scan_one_account", side_effect=fake_scan), \
+             patch("inbox_scout.resort_mode.LATEST_RESORT_PLAN") as mock_path:
+            mock_path.parent = MagicMock()
+            mock_path.write_text = MagicMock()
+            build_resort_preview_message(account="primary")
+        self.assertEqual(progress_calls, [], "Preview must not send progress messages")
 
 
 class TestBuildResortCandidates(unittest.TestCase):

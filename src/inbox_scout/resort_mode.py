@@ -14,6 +14,7 @@ from inbox_scout.paths import LATEST_RESORT_PLAN
 INBOX_SCOUT_PREFIX = "InboxScout/"
 CAP_PER_LABEL = 10  # Max messages to fetch per label per account
 _RISK_THRESHOLD = 30
+_PROGRESS_INTERVAL = 50  # Send a Telegram progress update every N emails processed
 
 # Labels that are manual-review buckets — never flag as mismatches
 _SKIP_CURRENT_LABELS = frozenset({
@@ -114,16 +115,27 @@ def build_resort_candidates(classified_emails: list[dict], current_label: str) -
     return mismatches, skips
 
 
-def _scan_one_account(account: str) -> dict:
+def _scan_one_account(account: str, on_progress=None) -> dict:
     """Scan all InboxScout labels for one account. Returns plan dict. No Gmail writes."""
     from inbox_scout.report_mode import classify_for_report
+
+    def _notify(msg: str) -> None:
+        if on_progress is None:
+            return
+        try:
+            on_progress(msg)
+        except Exception:
+            pass
 
     try:
         service = _get_service(account)
         results = service.users().labels().list(userId="me").execute()
         all_labels = results.get("labels", [])
     except Exception as e:
-        return {"account": account, "error": str(e), "mismatches": [], "scanned": 0}
+        return {
+            "account": account, "error": str(e), "mismatches": [], "scanned": 0,
+            "total_in_library": 0, "total_to_scan": 0,
+        }
 
     inbox_scout_labels = [
         lbl["name"]
@@ -131,9 +143,21 @@ def _scan_one_account(account: str) -> dict:
         if lbl["name"].startswith(INBOX_SCOUT_PREFIX)
     ]
 
+    label_msg_counts = {lbl["name"]: lbl.get("messagesTotal", 0) for lbl in all_labels}
+    total_in_library = sum(label_msg_counts.get(n, 0) for n in inbox_scout_labels)
+    total_to_scan = sum(min(label_msg_counts.get(n, 0), CAP_PER_LABEL) for n in inbox_scout_labels)
+    n_labels = len(inbox_scout_labels)
+
+    if n_labels > 0:
+        start_msg = f"Resort scan — {account}: {total_to_scan} emails across {n_labels} labels"
+        if total_in_library > total_to_scan:
+            start_msg += f" ({total_in_library:,} total in library)"
+        _notify(start_msg)
+
     all_mismatches: list[dict] = []
     total_scanned = 0
     total_skips = {"protected": 0, "manual_review": 0, "high_risk": 0, "review_label": 0}
+    _last_progress_bucket = 0
 
     for label_name in inbox_scout_labels:
         emails = _fetch_labeled_emails(service, label_name)
@@ -146,9 +170,25 @@ def _scan_one_account(account: str) -> dict:
         for k in total_skips:
             total_skips[k] += skips.get(k, 0)
 
+        if total_to_scan > 0:
+            bucket = total_scanned // _PROGRESS_INTERVAL
+            if bucket > _last_progress_bucket:
+                _last_progress_bucket = bucket
+                pct = int(total_scanned / total_to_scan * 100)
+                _notify(f"Resort progress: {total_scanned}/{total_to_scan} — {pct}%")
+
+    if n_labels > 0:
+        found = len(all_mismatches)
+        _notify(
+            f"Resort scan complete — {account}: {total_scanned} scanned, "
+            f"{found} correction{'s' if found != 1 else ''} found"
+        )
+
     return {
         "account": account,
         "scanned": total_scanned,
+        "total_in_library": total_in_library,
+        "total_to_scan": total_to_scan,
         "mismatches": all_mismatches,
         "skipped_protected": total_skips["protected"],
         "skipped_manual_review": total_skips["manual_review"],

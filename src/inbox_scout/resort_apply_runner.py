@@ -111,13 +111,20 @@ def _validate_mismatch(m: dict) -> tuple[bool, str]:
 def build_resort_run_message(account: str = "both") -> str:
     """Scan InboxScout folders then immediately apply safe label corrections."""
     from inbox_scout.resort_mode import _scan_one_account
+    try:
+        from inbox_scout.telegram_notifier import send_message as _send_progress
+    except Exception:
+        _send_progress = None
 
     if account in ("both", "unspecified"):
-        plans = [_scan_one_account("primary"), _scan_one_account("secondary")]
+        plans = [
+            _scan_one_account("primary", on_progress=_send_progress),
+            _scan_one_account("secondary", on_progress=_send_progress),
+        ]
     elif account == "primary":
-        plans = [_scan_one_account("primary")]
+        plans = [_scan_one_account("primary", on_progress=_send_progress)]
     else:
-        plans = [_scan_one_account("secondary")]
+        plans = [_scan_one_account("secondary", on_progress=_send_progress)]
 
     combined = {
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -149,6 +156,13 @@ def build_resort_apply_message() -> str:
 
     if not all_items:
         return "No corrections in resort plan. Gmail not touched."
+
+    total_scanned_overall = sum(p.get("scanned", 0) for p in plan.get("plans", []))
+    scan_skip_total = sum(
+        p.get("skipped_protected", 0) + p.get("skipped_manual_review", 0)
+        + p.get("skipped_high_risk", 0) + p.get("skipped_review_label", 0)
+        for p in plan.get("plans", [])
+    )
 
     valid: list[dict] = []
     skipped: list[tuple[str, str]] = []
@@ -321,7 +335,11 @@ def build_resort_apply_message() -> str:
         lines.append("\nGmail not touched.")
         return "\n".join(lines)
 
-    lines = [f"Done. Applied {len(applied)} resort correction(s).", ""]
+    all_skipped_total = scan_skip_total + len(skipped)
+    stat_line = f"Scanned {total_scanned_overall}" if total_scanned_overall else ""
+    if stat_line and all_skipped_total:
+        stat_line += f" — {all_skipped_total} skipped"
+    lines = [f"Done. Applied {len(applied)} resort correction(s)." + (f" {stat_line}." if stat_line else ""), ""]
     lines.extend(f"- {a}" for a in applied)
     if errors:
         lines.extend(["", "Warnings:"])
