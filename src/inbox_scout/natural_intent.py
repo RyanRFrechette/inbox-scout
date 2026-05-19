@@ -608,6 +608,15 @@ def handle_natural_message(text: str) -> str:
             _scope = "both"
         return build_resort_preview_message(account=_scope)
 
+    if any(phrase in msg for phrase in [
+        "confirm resort apply",
+        "apply resort fixes",
+        "apply resort corrections",
+        "apply resort",
+    ]):
+        from inbox_scout.resort_apply_runner import build_resort_apply_message
+        return build_resort_apply_message()
+
     if any(phrase in msg for phrase in ["status", "audit", "how is my inbox", "inbox status"]):
         return build_status_message()
 
