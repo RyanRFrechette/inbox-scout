@@ -601,10 +601,22 @@ def handle_natural_message(text: str) -> str:
         return build_resort_preview_message(account=_scope)
 
     if any(phrase in msg for phrase in [
+        "resort everything",
+        "resort all mail",
+        "re-sort all email",
+        "recheck all sorted mail",
+        "rerun sorting on everything",
+    ]):
+        from inbox_scout.resort_everything import build_resort_everything_message
+        _scope = _parse_account(msg)
+        if _scope == "unspecified":
+            _scope = "both"
+        return build_resort_everything_message(account=_scope)
+
+    if any(phrase in msg for phrase in [
         "resort my sorted emails",
         "resort my emails",
         "resort sorted emails",
-        "resort everything",
         "audit my archives",
         "check if anything is in the wrong folder",
         "are my emails sorted correctly",
