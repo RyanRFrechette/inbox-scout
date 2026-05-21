@@ -22,6 +22,7 @@ from inbox_scout.trash_execution_runner import append_jsonl
 _LIST_PAGE_SIZE = 500       # Max per messages.list call
 _PROCESS_BATCH_SIZE = 50    # Messages per classify batch
 _LOG_BATCH_INTERVAL = 200   # Console progress every N messages scanned
+_APPLY_ERROR_CAP = 50       # Max stored apply-error strings; excess counted but not stored
 
 # Gmail system label IDs that must never be removed
 _SYSTEM_LABEL_IDS = frozenset({
@@ -72,7 +73,7 @@ def collect_all_message_ids(service, debug_cap: Optional[int] = None) -> tuple[l
         try:
             resp = service.users().messages().list(**kwargs).execute()
         except Exception:
-            break
+            raise
 
         for msg in resp.get("messages", []):
             seen.add(msg["id"])
@@ -101,9 +102,13 @@ def _build_label_maps(service) -> tuple[dict, dict]:
     return name_to_id, id_to_name
 
 
-def _fetch_metadata_batch(service, message_ids: list[str]) -> list[dict]:
-    """Fetch From/Subject/Date/snippet/labelIds for a batch of message IDs."""
+def _fetch_metadata_batch(service, message_ids: list[str]) -> tuple[list[dict], int]:
+    """Fetch From/Subject/Date/snippet/labelIds for a batch of message IDs.
+
+    Returns (results, failed_count) so callers can track fetch errors explicitly.
+    """
     result: list[dict] = []
+    failed = 0
     for msg_id in message_ids:
         try:
             detail = service.users().messages().get(
@@ -122,8 +127,8 @@ def _fetch_metadata_batch(service, message_ids: list[str]) -> list[dict]:
                 "label_ids": detail.get("labelIds", []),
             })
         except Exception:
-            pass
-    return result
+            failed += 1
+    return result, failed
 
 
 def _get_current_inboxscout_label(label_ids: list[str], id_to_name: dict) -> str:
@@ -139,18 +144,10 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _run_account_everything(account: str, on_progress=None, on_log=None) -> dict:
+def _run_account_everything(account: str, on_log=None) -> dict:
     """Full corpus scan + label correction for one account. No Gmail writes except label swaps."""
     from inbox_scout.report_mode import classify_for_report
     from inbox_scout.autopilot_cleanup import _pick_inboxscout_label
-
-    def _notify(msg: str) -> None:
-        if on_progress is None:
-            return
-        try:
-            on_progress(msg)
-        except Exception:
-            pass
 
     def _log(msg: str) -> None:
         if on_log is None:
@@ -198,11 +195,11 @@ def _run_account_everything(account: str, on_progress=None, on_log=None) -> dict
 
     for batch_start in range(0, target, _PROCESS_BATCH_SIZE):
         batch_ids = ids[batch_start: batch_start + _PROCESS_BATCH_SIZE]
-        emails = _fetch_metadata_batch(ro_service, batch_ids)
+        emails, fetch_errors = _fetch_metadata_batch(ro_service, batch_ids)
+        error_count += fetch_errors
+        total_scanned += fetch_errors
 
         if not emails:
-            total_scanned += len(batch_ids)
-            error_count += len(batch_ids)
             continue
 
         classified = classify_for_report(emails)
@@ -268,12 +265,19 @@ def _run_account_everything(account: str, on_progress=None, on_log=None) -> dict
     # Phase 4: apply label corrections
     applied = 0
     apply_errors: list[str] = []
+    _apply_error_total = 0
+
+    def _record_apply_error(msg: str) -> None:
+        nonlocal _apply_error_total
+        _apply_error_total += 1
+        if len(apply_errors) < _APPLY_ERROR_CAP:
+            apply_errors.append(msg)
 
     if all_corrections:
         try:
             mod_service = _get_modify_service(account)
         except Exception as e:
-            apply_errors.append(f"Gmail connect failed: {e}")
+            _record_apply_error(f"Gmail connect failed: {e}")
             mod_service = None
 
         if mod_service:
@@ -287,13 +291,13 @@ def _run_account_everything(account: str, on_progress=None, on_log=None) -> dict
                 current_id = name_to_id.get(current_label)
 
                 if not recommended_id:
-                    apply_errors.append(f"'{subj}': label '{recommended_label}' not in Gmail")
+                    _record_apply_error(f"'{subj}': label '{recommended_label}' not in Gmail")
                     error_count += 1
                     continue
 
                 # Safety guard: never remove a system label
                 if current_id and _is_system_label_id(current_id):
-                    apply_errors.append(f"'{subj}': refusing to remove system label '{current_label}'")
+                    _record_apply_error(f"'{subj}': refusing to remove system label '{current_label}'")
                     error_count += 1
                     continue
 
@@ -304,7 +308,7 @@ def _run_account_everything(account: str, on_progress=None, on_log=None) -> dict
                         body={"addLabelIds": [recommended_id]},
                     ).execute()
                 except Exception as e:
-                    apply_errors.append(f"'{subj}': add label failed — {e}")
+                    _record_apply_error(f"'{subj}': add label failed — {e}")
                     error_count += 1
                     continue
 
@@ -316,7 +320,7 @@ def _run_account_everything(account: str, on_progress=None, on_log=None) -> dict
                             body={"removeLabelIds": [current_id]},
                         ).execute()
                     except Exception as e:
-                        apply_errors.append(f"'{subj}': remove old label failed — {e}")
+                        _record_apply_error(f"'{subj}': remove old label failed — {e}")
 
                 applied += 1
                 append_jsonl(RESORT_APPLY_LOG, {
@@ -333,6 +337,11 @@ def _run_account_everything(account: str, on_progress=None, on_log=None) -> dict
                     "trashed": False,
                     "archived": False,
                 })
+
+    if _apply_error_total > len(apply_errors):
+        apply_errors.append(
+            f"... and {_apply_error_total - len(apply_errors)} more apply errors (capped at {_APPLY_ERROR_CAP})"
+        )
 
     complete = not is_capped and error_count == 0 and total_scanned >= target
 
@@ -386,20 +395,15 @@ def _empty_result(account: str) -> dict:
 
 def build_resort_everything_message(account: str = "both") -> str:
     """Telegram entry point. Ack is sent by router; this returns the final summary."""
-    try:
-        from inbox_scout.telegram_notifier import send_message as _send_progress
-    except Exception:
-        _send_progress = None
-
     if account in ("both", "unspecified"):
         results = [
-            _run_account_everything("primary", on_progress=_send_progress, on_log=print),
-            _run_account_everything("secondary", on_progress=_send_progress, on_log=print),
+            _run_account_everything("primary", on_log=print),
+            _run_account_everything("secondary", on_log=print),
         ]
     elif account == "primary":
-        results = [_run_account_everything("primary", on_progress=_send_progress, on_log=print)]
+        results = [_run_account_everything("primary", on_log=print)]
     else:
-        results = [_run_account_everything("secondary", on_progress=_send_progress, on_log=print)]
+        results = [_run_account_everything("secondary", on_log=print)]
 
     return _format_everything_summary(results)
 
@@ -431,7 +435,6 @@ def _format_everything_summary(results: list[dict]) -> str:
 
         lines.append(f"{label}: {scanned:,}/{target:,} scanned — {applied} corrections — {status}")
 
-    errors_only = [r for r in results if r.get("error")]
     good = [r for r in results if not r.get("error")]
 
     if len(good) > 1:

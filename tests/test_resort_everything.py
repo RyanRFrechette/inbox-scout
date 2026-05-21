@@ -268,11 +268,10 @@ class TestRunAccountEverything(unittest.TestCase):
 
 class TestTelegramQuietConsoleVerbose(unittest.TestCase):
 
-    def test_on_progress_not_called_during_scan(self):
-        """on_progress (Telegram) must not fire for per-batch console progress."""
+    def test_on_log_fires_during_scan(self):
+        """Console (on_log) receives progress during full-corpus scan."""
         from inbox_scout import resort_everything
         svc = MagicMock()
-        # Build a service with 300 messages across 6 pages of 50 so _LOG_BATCH_INTERVAL triggers
         all_ids = [f"msg_{i}" for i in range(300)]
         svc.users.return_value.messages.return_value.list.return_value.execute.return_value = {
             "messages": [{"id": mid} for mid in all_ids]
@@ -292,19 +291,13 @@ class TestTelegramQuietConsoleVerbose(unittest.TestCase):
         }
         svc.users.return_value.messages.return_value.get.return_value = get_mock
 
-        progress_calls: list[str] = []
         log_calls: list[str] = []
         classified = [_classified_nl() for _ in range(50)]
 
         with patch.object(resort_everything, "_get_readonly_service", return_value=svc), \
              patch("inbox_scout.report_mode.classify_for_report", return_value=classified):
-            _run_account_everything("primary",
-                                    on_progress=progress_calls.append,
-                                    on_log=log_calls.append)
+            _run_account_everything("primary", on_log=log_calls.append)
 
-        # Telegram must be silent (on_progress only fires at high milestones or errors)
-        self.assertEqual(progress_calls, [], "Telegram must stay quiet during full-corpus scan")
-        # Console must receive progress lines
         self.assertTrue(any("[resort-all]" in c for c in log_calls), "Console must log progress")
 
     def test_on_log_fires_at_progress_milestones(self):
@@ -393,6 +386,164 @@ class TestFormatEverythingSummary(unittest.TestCase):
         summary = _format_everything_summary(r)
         self.assertIn("150/150", summary)
         self.assertIn("Combined", summary)
+
+
+# ---------------------------------------------------------------------------
+# 7. Pagination API error surfaces as error result, not silent complete
+# ---------------------------------------------------------------------------
+
+class TestPaginationApiError(unittest.TestCase):
+
+    def test_api_error_raises_from_collect(self):
+        """collect_all_message_ids must propagate API errors, not swallow them."""
+        svc = MagicMock()
+        svc.users.return_value.messages.return_value.list.return_value.execute.side_effect = (
+            RuntimeError("network error")
+        )
+        with self.assertRaises(RuntimeError):
+            collect_all_message_ids(svc)
+
+    def test_pagination_error_reports_incomplete_not_complete(self):
+        """_run_account_everything must return an error result when pagination fails."""
+        from inbox_scout import resort_everything
+        svc = MagicMock()
+        svc.users.return_value.messages.return_value.list.return_value.execute.side_effect = (
+            RuntimeError("quota exceeded")
+        )
+        with patch.object(resort_everything, "_get_readonly_service", return_value=svc):
+            result = _run_account_everything("primary")
+        self.assertFalse(result.get("complete", True), "Pagination error must not report complete")
+        self.assertIn("error", result, "Result must contain error key")
+        self.assertIn("collection failed", result["error"].lower())
+
+
+# ---------------------------------------------------------------------------
+# 8. Metadata batch partial failure increments error count
+# ---------------------------------------------------------------------------
+
+class TestFetchMetadataBatchErrors(unittest.TestCase):
+
+    def test_partial_failure_returns_failed_count(self):
+        """_fetch_metadata_batch must return (results, failed_count)."""
+        from inbox_scout.resort_everything import _fetch_metadata_batch
+        svc = MagicMock()
+        svc.users.return_value.messages.return_value.get.return_value.execute.side_effect = [
+            {
+                "labelIds": ["INBOX"],
+                "payload": {"headers": [
+                    {"name": "From", "value": "x@example.com"},
+                    {"name": "Subject", "value": "Hello"},
+                    {"name": "Date", "value": "Mon"},
+                ]},
+                "snippet": "hi",
+            },
+            RuntimeError("fetch failed"),
+            {
+                "labelIds": ["INBOX"],
+                "payload": {"headers": [
+                    {"name": "From", "value": "y@example.com"},
+                    {"name": "Subject", "value": "World"},
+                    {"name": "Date", "value": "Tue"},
+                ]},
+                "snippet": "world",
+            },
+        ]
+        results, failed = _fetch_metadata_batch(svc, ["id1", "id2", "id3"])
+        self.assertEqual(len(results), 2)
+        self.assertEqual(failed, 1)
+
+    def test_partial_failure_increments_error_count_in_run(self):
+        """Fetch errors must appear in the result error count and mark run incomplete."""
+        from inbox_scout import resort_everything
+        svc = MagicMock()
+        svc.users.return_value.messages.return_value.list.return_value.execute.return_value = {
+            "messages": [{"id": "msg_a"}, {"id": "msg_b"}]
+        }
+        svc.users.return_value.labels.return_value.list.return_value.execute.return_value = {
+            "labels": [{"name": "InboxScout/Newsletter", "id": "lbl_nl"}]
+        }
+        svc.users.return_value.messages.return_value.get.return_value.execute.side_effect = [
+            {
+                "labelIds": ["lbl_nl"],
+                "payload": {"headers": [
+                    {"name": "From", "value": "nl@example.com"},
+                    {"name": "Subject", "value": "Newsletter"},
+                    {"name": "Date", "value": "Mon"},
+                ]},
+                "snippet": "nl",
+            },
+            RuntimeError("transient error"),
+        ]
+        classified = [_classified_nl()]
+        with patch.object(resort_everything, "_get_readonly_service", return_value=svc), \
+             patch("inbox_scout.report_mode.classify_for_report", return_value=classified):
+            result = _run_account_everything("primary")
+        self.assertGreater(result["errors"], 0, "Fetch errors must be counted")
+        self.assertFalse(result["complete"], "Fetch errors must mark run incomplete")
+
+
+# ---------------------------------------------------------------------------
+# 9. apply_errors list is capped at _APPLY_ERROR_CAP
+# ---------------------------------------------------------------------------
+
+class TestApplyErrorsCapped(unittest.TestCase):
+
+    def test_apply_errors_capped_with_overflow_note(self):
+        """apply_errors must be capped; excess errors noted in overflow line."""
+        from inbox_scout import resort_everything
+
+        n = 10
+        msg_ids = [f"msg_{i}" for i in range(n)]
+        svc = MagicMock()
+        svc.users.return_value.messages.return_value.list.return_value.execute.return_value = {
+            "messages": [{"id": mid} for mid in msg_ids]
+        }
+        # Label map has Newsletter but NOT Promotions — triggers "label not in Gmail" error
+        svc.users.return_value.labels.return_value.list.return_value.execute.return_value = {
+            "labels": [{"name": "InboxScout/Newsletter", "id": "lbl_nl"}]
+        }
+        get_mock = MagicMock()
+        get_mock.execute.return_value = {
+            "labelIds": ["lbl_nl"],
+            "payload": {"headers": [
+                {"name": "From", "value": "promo@example.com"},
+                {"name": "Subject", "value": "Big Sale"},
+                {"name": "Date", "value": "Mon"},
+            ]},
+            "snippet": "big sale",
+        }
+        svc.users.return_value.messages.return_value.get.return_value = get_mock
+
+        classified_promos = [{
+            "message_id": f"msg_{i}",
+            "from": "promo@example.com",
+            "subject": "Big Sale",
+            "snippet": "big sale",
+            "ai_classification": {
+                "category": "Promotion",
+                "risk_score": 5,
+                "manual_review": False,
+                "protected": False,
+            },
+        } for i in range(n)]
+
+        mod_svc = MagicMock()
+
+        with patch.object(resort_everything, "_get_readonly_service", return_value=svc), \
+             patch.object(resort_everything, "_get_modify_service", return_value=mod_svc), \
+             patch.object(resort_everything, "_APPLY_ERROR_CAP", 3), \
+             patch.object(resort_everything, "_validate_mismatch", return_value=(True, "")), \
+             patch("inbox_scout.autopilot_cleanup._pick_inboxscout_label",
+                   return_value="InboxScout/Promotions"), \
+             patch("inbox_scout.report_mode.classify_for_report", return_value=classified_promos):
+            result = _run_account_everything("primary")
+
+        # Stored list must be at most cap + 1 overflow line
+        self.assertLessEqual(len(result["apply_errors"]), 4)
+        self.assertTrue(
+            any("more" in e for e in result["apply_errors"]),
+            f"Expected overflow note in apply_errors: {result['apply_errors']}"
+        )
 
 
 if __name__ == "__main__":
