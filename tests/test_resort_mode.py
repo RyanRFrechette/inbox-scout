@@ -373,7 +373,7 @@ class TestResortPreviewAccountScoping(unittest.TestCase):
     def _run_preview(self, account: str, scan_side_effect=None) -> tuple[str, list]:
         called_with = []
 
-        def fake_scan(acct):
+        def fake_scan(acct, on_progress=None, on_log=None):
             called_with.append(acct)
             return _mock_scan(acct)
 
@@ -427,19 +427,22 @@ class TestResortRouting(unittest.TestCase):
         from unittest.mock import patch, MagicMock
         import inbox_scout.natural_intent as ni
 
-        resort_mock = MagicMock(return_value="__resort__")
+        resort_run_mock = MagicMock(return_value="__resort_run__")
+        resort_preview_mock = MagicMock(return_value="__resort_preview__")
         status_mock = MagicMock(return_value="__status__")
 
-        with patch.object(ni, "build_resort_preview_message", resort_mock, create=True), \
-             patch("inbox_scout.resort_mode.build_resort_preview_message", resort_mock), \
+        with patch("inbox_scout.resort_apply_runner.build_resort_run_message", resort_run_mock), \
+             patch("inbox_scout.resort_mode.build_resort_preview_message", resort_preview_mock), \
              patch("inbox_scout.natural_intent.build_status_message", status_mock):
-            result = ni.handle_natural_message(text)
+            ni.handle_natural_message(text)
 
-        if resort_mock.called:
+        if resort_run_mock.called:
+            return "resort"
+        if resort_preview_mock.called:
             return "resort"
         if status_mock.called:
             return "status"
-        return result
+        return "other"
 
     def test_audit_my_archives_routes_to_resort(self):
         self.assertEqual(self._route("audit my archives"), "resort")
@@ -465,10 +468,17 @@ class TestResortAck(unittest.TestCase):
         sent = []
         with patch("inbox_scout.telegram_listener.send_message", side_effect=sent.append), \
              patch("inbox_scout.telegram_listener.handle_command", return_value="__final__"):
-            # Simulate the relevant dispatch block directly
-            if any(phrase in text.lower() for phrase in tl._RESORT_PREVIEW_PHRASES):
+            _lower = text.lower()
+            is_run = any(phrase in _lower for phrase in tl._RESORT_RUN_PHRASES)
+            is_preview = any(phrase in _lower for phrase in tl._RESORT_PREVIEW_PHRASES)
+            if is_run or is_preview:
+                ack = (
+                    "Got it — scanning your sorted folders and applying safe label corrections. Labels only, no trash or delete."
+                    if is_run else
+                    "Got it — scanning your sorted folders (preview only). This is read-only and will not change Gmail."
+                )
                 try:
-                    tl.send_message("Got it — starting Resort Mode Preview now. This is read-only and will not change Gmail.")
+                    tl.send_message(ack)
                 except Exception:
                     pass
             tl.send_message(tl.handle_command(text))
@@ -477,21 +487,21 @@ class TestResortAck(unittest.TestCase):
     def test_resort_command_sends_ack_first(self):
         sent = self._run("resort my sorted emails")
         self.assertEqual(len(sent), 2)
-        self.assertIn("Resort Mode Preview", sent[0])
-        self.assertIn("read-only", sent[0])
+        self.assertIn("scanning your sorted folders", sent[0])
 
     def test_audit_my_archives_sends_ack_first(self):
         sent = self._run("audit my archives")
-        self.assertIn("Resort Mode Preview", sent[0])
+        self.assertEqual(len(sent), 2)
+        self.assertIn("scanning your sorted folders", sent[0])
 
     def test_audit_sorted_folders_sends_ack_first(self):
         sent = self._run("audit sorted folders")
-        self.assertIn("Resort Mode Preview", sent[0])
+        self.assertEqual(len(sent), 2)
+        self.assertIn("scanning your sorted folders", sent[0])
 
     def test_non_resort_command_no_ack(self):
         sent = self._run("status")
         self.assertEqual(len(sent), 1)
-        self.assertNotIn("Resort Mode Preview", sent[0])
 
 
 if __name__ == "__main__":
