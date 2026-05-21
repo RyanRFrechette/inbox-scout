@@ -97,7 +97,7 @@ class TestConfirmAndCancel(unittest.TestCase):
                    return_value="AUTOPILOT_RAN") as mock_run:
             result = ni.handle_natural_message("CONFIRM INBOX AUTOPILOT")
 
-        mock_run.assert_called_once_with("handle my inbox")
+        mock_run.assert_called_once_with("handle my inbox", account="primary")
         mock_clear.assert_called_once()
         self.assertEqual(result, "AUTOPILOT_RAN")
 

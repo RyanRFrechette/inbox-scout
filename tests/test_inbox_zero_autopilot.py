@@ -23,7 +23,7 @@ class TestInboxZeroRouting(unittest.TestCase):
 
         called = []
 
-        def fake_inbox_zero(text: str) -> str:
+        def fake_inbox_zero(text: str, account="primary") -> str:
             called.append(text)
             return "inbox_zero called"
 
@@ -83,11 +83,11 @@ class TestInboxZeroRouting(unittest.TestCase):
 
         called = {}
 
-        def fake_inbox_zero(text):
+        def fake_inbox_zero(text, account="primary"):
             called["inbox_zero"] = True
             return "inbox_zero"
 
-        def fake_autopilot(text):
+        def fake_autopilot(text, account="primary"):
             called["autopilot"] = True
             return "autopilot"
 
@@ -387,7 +387,7 @@ class TestRunInboxZeroAutopilotFullInbox(unittest.TestCase):
 
         original_patches = self._base_patches(ac, n_batches=3)
 
-        def count_scan():
+        def count_scan(account="primary"):
             scan_calls[0] += 1
             return MagicMock(returncode=0)
 

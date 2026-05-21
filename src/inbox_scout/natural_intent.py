@@ -90,10 +90,11 @@ def _is_pending_autopilot_cancellation(msg: str) -> bool:
 
 def _execute_pending_autopilot(pending: dict, fallback_text: str) -> str:
     _orig = pending.get("original_text", fallback_text)
-    _scope = _account_scope_for_action(_orig)
+    _scope = _parse_account(_orig)
     if _scope == "both":
         return _run_both_inbox_zero(_orig)
-    return run_inbox_zero_autopilot(_orig, account=_scope)
+    _account = "primary" if _scope == "unspecified" else _scope
+    return run_inbox_zero_autopilot(_orig, account=_account)
 
 
 _PRIMARY_RE = re.compile(
@@ -419,6 +420,8 @@ _AUTOPILOT_PHRASES = [
     "clean my inbox",
     "cleanup my inbox",
     "clean inbox",
+    "clean up a batch",
+    "clean a batch",
 ]
 
 
@@ -760,16 +763,18 @@ def handle_natural_message(text: str) -> str:
         return sort_plan_message(text, cleanup=True)
 
     if _is_inbox_zero(msg):
-        _scope = _account_scope_for_action(text)
+        _scope = _parse_account(text)
         if _scope == "both":
-            return _autopilot_confirm_prompt(text)
-        return run_inbox_zero_autopilot(text, account=_scope)
+            return _run_both_inbox_zero(text)
+        _account = "primary" if _scope == "unspecified" else _scope
+        return run_inbox_zero_autopilot(text, account=_account)
 
     if _is_autopilot_cleanup(msg):
-        _scope = _account_scope_for_action(text)
+        _scope = _parse_account(text)
         if _scope == "both":
-            return _autopilot_confirm_prompt(text)
-        return run_autopilot_cleanup(text, account=_scope)
+            return _run_both_autopilot_cleanup(text)
+        _account = "primary" if _scope == "unspecified" else _scope
+        return run_autopilot_cleanup(text, account=_account)
 
     if any(phrase in msg for phrase in ["next", "next review", "needs review", "what needs my attention"]):
         return next_review_item()

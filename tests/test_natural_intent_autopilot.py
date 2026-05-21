@@ -21,7 +21,7 @@ class TestAutopilotRouting(unittest.TestCase):
 
         called = []
 
-        def fake_autopilot(text: str) -> str:
+        def fake_autopilot(text: str, account="primary") -> str:
             called.append(text)
             return "autopilot called"
 
@@ -55,6 +55,12 @@ class TestAutopilotRouting(unittest.TestCase):
     def test_sort_5_emails(self):
         self._assert_routes_to_autopilot("sort 5 emails")
 
+    def test_clean_up_a_batch(self):
+        self._assert_routes_to_autopilot("clean up a batch")
+
+    def test_clean_a_batch(self):
+        self._assert_routes_to_autopilot("clean a batch")
+
     def test_is_autopilot_cleanup_helper(self):
         from inbox_scout.natural_intent import _is_autopilot_cleanup
 
@@ -64,6 +70,8 @@ class TestAutopilotRouting(unittest.TestCase):
         self.assertTrue(_is_autopilot_cleanup("handle a batch"))
         self.assertTrue(_is_autopilot_cleanup("clean up my inbox"))
         self.assertTrue(_is_autopilot_cleanup("clean the next 25"))
+        self.assertTrue(_is_autopilot_cleanup("clean up a batch"))
+        self.assertTrue(_is_autopilot_cleanup("clean a batch"))
 
         # These should NOT trigger autopilot
         self.assertFalse(_is_autopilot_cleanup("yes"))

@@ -55,7 +55,7 @@ def _run(
     def fake_save_plan(p):
         call_order.append("save_plan")
 
-    def fake_run_scan():
+    def fake_run_scan(account="primary"):
         call_order.append("run_scan")
         return mock_proc
 
