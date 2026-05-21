@@ -1,6 +1,6 @@
 # Inbox Scout - CLAUDE.md
 
-Last updated: 2026-05-21 (routing fix + full test suite green)
+Last updated: 2026-05-21 (cloud-ready — token decode, Linux-safe watcher, 696 tests)
 
 ---
 
@@ -33,14 +33,20 @@ The Telegram bot ("Atlas") allows Ryan to run inbox operations from his phone wi
 ## 2. Current phase / status
 
 **Current branch:** master
-**Last commit:** `0c61c58` — fix: correct stale test fixtures in test_resort_mode.py (2026-05-21)
+**Last commit:** `6d69651` — fix: review findings on cloud_startup.py (2026-05-21)
+
+**Phase Cloud Readiness — 2026-05-21:**
+- All 696 tests pass (0 failures, 0 errors)
+- New: cloud_startup.py — decodes GMAIL_TOKEN_JSON and GMAIL_TOKEN_MODIFY_JSON from base64 at startup; validates JSON; never overwrites existing files; never logs values
+- Fixed: kill_stale_watchers() no-ops on non-Windows (port lock handles dedup on Linux)
+- Fixed: refuse_global_python() skips check on non-Windows and when no .venv (cloud)
+- Updated: render.yaml, .env.example, README with full cloud deployment guide
+- Key commits: 53d2365 (cloud startup + Linux-safe watcher), d48ebb7 (docs), 6d69651 (review fixes)
 
 **Phase MVP Routing — 2026-05-21:**
-- All 682 tests pass (0 failures, 0 errors)
-- Routing bug fixed: autopilot cleanup / inbox-zero now runs on primary account when no account specified (was returning confirmation prompt due to _account_scope_for_action mapping unspecified→both)
+- Routing bug fixed: autopilot cleanup / inbox-zero now runs on primary account when no account specified
 - Added phrases: "clean up a batch", "clean a batch", "progress report"
 - Resort Everything reviewed, fixed, committed (commits 1bfc585 → 80735d5)
-- Stale resort_mode test fixtures corrected (0c61c58)
 - Key commits: b4c2141 (routing fix), 2742c85 (status/docs), 0c61c58 (test fixtures)
 
 **Phase 13Z-C — Live MVP test passed (2026-05-14):**
@@ -120,10 +126,9 @@ The Telegram bot ("Atlas") allows Ryan to run inbox operations from his phone wi
 **Current safety mode:** Autopilot routes to primary account by default. Gmail Trash only — no permanent delete. Protected/manual-review always skipped.
 
 **Next planned steps (in order):**
-1. Live Telegram smoke test: send "clean up a batch" and "progress report" to Atlas and verify responses
-2. Cloud deployment: decode GMAIL_TOKEN_JSON env var at startup (token not yet auto-decoded on Render)
-3. Linux-native process cleanup in telegram_watch.py (PowerShell calls fail silently on Linux)
-4. Phase 14 — Permanent delete mode (nuclear, disabled until explicitly enabled)
+1. Push to origin/master and deploy to Render (render.yaml is ready; encode tokens and set secrets)
+2. Verify deployed worker responds to "status" and "progress report" from Telegram
+3. Phase 14 — Permanent delete mode (nuclear, disabled until explicitly enabled)
 
 ---
 
