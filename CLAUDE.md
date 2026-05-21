@@ -1,6 +1,6 @@
 # Inbox Scout - CLAUDE.md
 
-Last updated: 2026-05-14 (Phase 13Z-C live MVP test passed)
+Last updated: 2026-05-21 (routing fix + full test suite green)
 
 ---
 
@@ -33,7 +33,15 @@ The Telegram bot ("Atlas") allows Ryan to run inbox operations from his phone wi
 ## 2. Current phase / status
 
 **Current branch:** master
-**Last commit:** `6e02ca1` — fix: prevent duplicate telegram watchers (2026-05-14)
+**Last commit:** `0c61c58` — fix: correct stale test fixtures in test_resort_mode.py (2026-05-21)
+
+**Phase MVP Routing — 2026-05-21:**
+- All 682 tests pass (0 failures, 0 errors)
+- Routing bug fixed: autopilot cleanup / inbox-zero now runs on primary account when no account specified (was returning confirmation prompt due to _account_scope_for_action mapping unspecified→both)
+- Added phrases: "clean up a batch", "clean a batch", "progress report"
+- Resort Everything reviewed, fixed, committed (commits 1bfc585 → 80735d5)
+- Stale resort_mode test fixtures corrected (0c61c58)
+- Key commits: b4c2141 (routing fix), 2742c85 (status/docs), 0c61c58 (test fixtures)
 
 **Phase 13Z-C — Live MVP test passed (2026-05-14):**
 - "clean my inbox" → 25-email read-only scan across 5 batches (cap enforced) ✓
@@ -109,11 +117,13 @@ The Telegram bot ("Atlas") allows Ryan to run inbox operations from his phone wi
 **Phase 13W** was completed prior (2026-05-13):
 - Cleaned up `natural_intent.py` — removed 194 lines of dead/duplicate code
 
-**Current safety mode:** READ-ONLY for scan. Gmail Trash via "move trash" only (gated — requires prior cleanup plan).
+**Current safety mode:** Autopilot routes to primary account by default. Gmail Trash only — no permanent delete. Protected/manual-review always skipped.
 
 **Next planned steps (in order):**
-1. Portfolio/cloud deployment planning
-2. Phase 14 — Permanent delete mode (nuclear, disabled until explicitly enabled)
+1. Live Telegram smoke test: send "clean up a batch" and "progress report" to Atlas and verify responses
+2. Cloud deployment: decode GMAIL_TOKEN_JSON env var at startup (token not yet auto-decoded on Render)
+3. Linux-native process cleanup in telegram_watch.py (PowerShell calls fail silently on Linux)
+4. Phase 14 — Permanent delete mode (nuclear, disabled until explicitly enabled)
 
 ---
 
