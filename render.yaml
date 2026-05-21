@@ -12,7 +12,11 @@ services:
       - key: TELEGRAM_CHAT_ID
         sync: false       # set in Render dashboard — never commit
       - key: GMAIL_TOKEN_JSON
-        sync: false       # base64-encoded token.json — see deployment notes
+        sync: false       # base64-encoded token.json — decoded at startup by cloud_startup.py
+      - key: GMAIL_TOKEN_MODIFY_JSON
+        sync: false       # base64-encoded token_modify.json — decoded at startup
+      - key: OPENROUTER_API_KEY
+        sync: false       # optional — AI classifier; falls back to rule-based if not set
     disk:
       name: inbox-scout-data
       mountPath: /opt/render/project/src/data
@@ -20,13 +24,24 @@ services:
 
 # Deployment notes:
 #
-# GMAIL_TOKEN_JSON: base64-encode your token.json and set as an env var.
-#   A startup script or entrypoint wrapper must decode it to data/token.json
-#   before the watcher starts. See README for the full pre-flight checklist.
+# Token setup:
+#   cloud_startup.py runs at watcher startup. It decodes GMAIL_TOKEN_JSON and
+#   GMAIL_TOKEN_MODIFY_JSON from base64 and writes them to the expected paths
+#   only if the files do not already exist (safe for local dev too).
 #
-# Ollama (AI classifier) is unavailable on Render. Classification falls back
-#   to rule-based only. This is safe — no Gmail actions are affected.
+#   To encode your tokens:
+#     PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes("token.json")) | clip
+#     Linux:      base64 -w 0 token.json
 #
-# telegram_watch.py currently uses PowerShell for stale-process cleanup.
-#   That code path fails silently on Linux and does not block the watcher.
-#   A Linux-native port (pkill/psutil) is required before production use.
+# AI classification:
+#   Ollama is unavailable on Render. With OPENROUTER_API_KEY set, classification
+#   uses OpenRouter (google/gemini-2.5-flash-lite or similar). Without it,
+#   rule-based classification runs only. No Gmail safety behavior changes.
+#
+# Linux compatibility:
+#   kill_stale_watchers() and refuse_global_python() skip Windows-only logic
+#   on Linux. Port-lock (socket) handles duplicate-instance prevention.
+#
+# Data persistence:
+#   Queue, log, and report files are written to data/ under the project root.
+#   The 1GB disk mount keeps them across deploys on Render.

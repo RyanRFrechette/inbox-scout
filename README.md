@@ -389,16 +389,79 @@ python -m inbox_scout.queue_audit --plain
 
 ## Environment variables
 
-Common local/cloud environment variables:
+| Variable | Required | Purpose |
+|---|---|---|
+| `TELEGRAM_BOT_TOKEN` | Yes | Telegram bot token for Atlas |
+| `TELEGRAM_CHAT_ID` | Yes | Authorized Telegram chat ID (numeric) |
+| `GMAIL_TOKEN_JSON` | Cloud only | base64-encoded `token.json` (readonly Gmail scope) |
+| `GMAIL_TOKEN_MODIFY_JSON` | Cloud only | base64-encoded `token_modify.json` (modify Gmail scope) |
+| `OPENROUTER_API_KEY` | No | Cloud AI classifier; falls back to rule-based if not set |
+| `PYTHONPATH` | Yes | Must include `src` |
 
-| Variable | Purpose |
-|---|---|
-| `TELEGRAM_BOT_TOKEN` | Telegram bot token for Atlas |
-| `TELEGRAM_CHAT_ID` | Authorized Telegram chat ID |
-| `OPENROUTER_API_KEY` | Optional cloud model provider key |
-| `PYTHONPATH` | Should include `src` |
+Local dev uses `token.json` / `token_modify.json` on disk. Cloud uses base64 env vars decoded at startup.
 
-Credential files such as Gmail tokens and local `.env` files are intentionally ignored by git.
+Credential files and local `.env` are intentionally ignored by git.
+
+---
+
+## Cloud deployment (Render / Railway / Fly / VPS)
+
+### 1. Encode Gmail tokens
+
+On Windows (PowerShell):
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("token.json")) | clip
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("token_modify.json")) | clip
+```
+
+On Linux/macOS:
+
+```bash
+base64 -w 0 token.json
+base64 -w 0 token_modify.json
+```
+
+### 2. Set environment secrets
+
+In your cloud dashboard (Render / Railway / Fly), set these as secrets (never commit values):
+
+```
+TELEGRAM_BOT_TOKEN=<your Atlas bot token>
+TELEGRAM_CHAT_ID=<your numeric chat ID>
+GMAIL_TOKEN_JSON=<base64 output from step 1>
+GMAIL_TOKEN_MODIFY_JSON=<base64 output from step 1>
+OPENROUTER_API_KEY=<optional>
+PYTHONPATH=src
+```
+
+### 3. Start command
+
+```
+python -m inbox_scout.telegram_watch
+```
+
+The worker auto-decodes token env vars to disk on startup (only if the files are missing).
+On Render, use the included `render.yaml` — it configures the worker, disk mount, and env vars.
+
+### 4. Verify deployment
+
+After the worker starts, send in Telegram:
+
+```
+status
+progress report
+```
+
+Atlas should respond with queue state. No Gmail reads happen from status alone.
+
+### Safety guarantees
+
+- Protected email categories are never auto-trashed (finance, receipts, billing, legal, medical, job/career, account/security, personal, client/business, warranty/support)
+- No permanent delete path exists
+- Gmail Trash only — reversible
+- No sender blocking
+- No replies
 
 ---
 
@@ -406,12 +469,16 @@ Credential files such as Gmail tokens and local `.env` files are intentionally i
 
 Next milestones:
 
-- Complete Inbox Zero filing mode.
-- Make `sort all` process the full unread inbox through safe batching.
 - Add safe category filing for shopping history and other low-risk archival categories.
-- Improve cloud deployment as an always-on background worker.
-- Add a lightweight dashboard for portfolio/demo visibility.
+- Add a lightweight dashboard or web status view for portfolio/demo visibility.
 - Keep permanent delete disabled unless a future explicit nuclear confirmation flow is designed and reviewed.
+
+Completed milestones:
+
+- Inbox Zero batch autopilot (`clean 25 emails`, `clean up a batch`, `sort all`)
+- OpenRouter AI classifier integration with local fallback
+- Resort Everything: full corpus label correction mode
+- Cloud deployment config (render.yaml, cloud_startup.py, Linux-safe watcher)
 
 ---
 
