@@ -56,10 +56,17 @@ Get-Content data\plans\latest_gmail_scan_cursor.json
 # Review plan
 .venv\Scripts\python.exe -m inbox_scout.natural_intent "show me the plan"
 
-# Status
+# Status and progress (read-only, local only)
 .venv\Scripts\python.exe -m inbox_scout.natural_intent "status"
+.venv\Scripts\python.exe -m inbox_scout.natural_intent "progress report"
 .venv\Scripts\python.exe -m inbox_scout.natural_intent "what did you move"
 .venv\Scripts\python.exe -m inbox_scout.natural_intent "what still needs review"
+
+# Inbox Zero autopilot (CHANGES GMAIL if safe candidates found)
+# Scans unread, classifies, auto-trashes obvious low-risk junk, marks read.
+# .venv\Scripts\python.exe -m inbox_scout.natural_intent "clean 25 emails"
+# .venv\Scripts\python.exe -m inbox_scout.natural_intent "clean up a batch"
+# .venv\Scripts\python.exe -m inbox_scout.natural_intent "get me closer to inbox zero"
 
 # Cleanup flow — Phase 13Z (scan phrases are read-only; "move trash" CHANGES GMAIL)
 # Live MVP test passed 2026-05-14: 25 emails / 5 batches / 8 moved to Trash

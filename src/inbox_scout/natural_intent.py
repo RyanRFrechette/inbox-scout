@@ -641,7 +641,7 @@ def handle_natural_message(text: str) -> str:
         from inbox_scout.resort_apply_runner import build_resort_apply_message
         return build_resort_apply_message()
 
-    if any(phrase in msg for phrase in ["status", "audit", "how is my inbox", "inbox status"]):
+    if any(phrase in msg for phrase in ["status", "audit", "how is my inbox", "inbox status", "progress report"]):
         return build_status_message()
 
     if msg in {"run archive dry run", "archive runner", "test archive runner"}:

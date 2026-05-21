@@ -55,19 +55,21 @@ Implemented areas:
 - OpenRouter model switching
 - Telegram bot control through Atlas
 - Natural-language cleanup commands
+- Inbox Zero batch autopilot: scan, classify, auto-trash safe junk, mark read
 - Safe Gmail Trash runner
 - Mark-as-read after successful safe action
 - Queue audit tooling
 - Protected-category safety system
 - InboxScout Gmail labels
 - Classification audit explanations
-- Cloud deployment planning for a background worker
+- Resort Everything: full corpus scan with label-only correction mode
+- Cloud deployment config (render.yaml)
 
 Current active direction:
 
-- Build a true Inbox Zero filing mode.
-- Make `sort all` and similar commands process the whole unread inbox through safe batch automation instead of old 5-email confirmation loops.
-- Safely label/archive selected low-risk historical categories while keeping finance, legal, medical, login/security, job, receipt, payment, account, and personal email protected.
+- Cloud deployment: decode Gmail OAuth token from env var at startup (GMAIL_TOKEN_JSON).
+- Linux-native process cleanup in telegram_watch.py (currently uses PowerShell, fails silently on Linux).
+- Phase 14 permanent delete mode (disabled; reserved for future explicit confirmation flow).
 
 ---
 
@@ -126,10 +128,15 @@ Inbox Scout is controlled through a Telegram bot named Atlas. The goal is to let
 
 ```text
 clean 25 emails
-sort my inbox
+clean up a batch
 get me closer to inbox zero
+sort all
+status
+progress report
 show queue
 /model status
+/model openrouter
+/model auto
 ```
 
 Atlas translates natural language into safe workflow actions.
