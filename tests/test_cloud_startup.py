@@ -64,8 +64,7 @@ class TestDecodeTokenEnvVars(unittest.TestCase):
             {"GMAIL_TOKEN_JSON": encoded},
             existing_files=["token.json"],
         )
-        # File should contain the original "{}" not the new payload
-        self.assertNotEqual(written.get("GMAIL_TOKEN_JSON"), payload)
+        self.assertEqual(written.get("GMAIL_TOKEN_JSON"), b"{}", "existing file must not be overwritten")
         self.assertTrue(any("already exists" in m for m in msgs))
 
     def test_skips_when_env_var_not_set(self):
@@ -78,6 +77,12 @@ class TestDecodeTokenEnvVars(unittest.TestCase):
         msgs, written = self._run({"GMAIL_TOKEN_JSON": "not-valid-base64!!!"})
         self.assertNotIn("GMAIL_TOKEN_JSON", written)
         self.assertTrue(any("base64 decode failed" in m for m in msgs))
+
+    def test_reports_error_on_non_json_content(self):
+        not_json = base64.b64encode(b"this is not json at all").decode()
+        msgs, written = self._run({"GMAIL_TOKEN_JSON": not_json})
+        self.assertNotIn("GMAIL_TOKEN_JSON", written)
+        self.assertTrue(any("not valid JSON" in m for m in msgs))
 
     def test_both_tokens_written_independently(self):
         ro_payload = b'{"token": "readonly"}'

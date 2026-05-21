@@ -16,8 +16,8 @@ Safe by design:
 from __future__ import annotations
 
 import base64
+import json
 import os
-import sys
 from pathlib import Path
 
 
@@ -61,6 +61,12 @@ def decode_token_env_vars(token_paths: dict[str, Path] | None = None) -> list[st
             decoded = base64.b64decode(raw)
         except Exception as exc:
             messages.append(f"{env_var}: base64 decode failed — {type(exc).__name__}: {exc}")
+            continue
+
+        try:
+            json.loads(decoded)
+        except (json.JSONDecodeError, ValueError) as exc:
+            messages.append(f"{env_var}: decoded content is not valid JSON — {exc}")
             continue
 
         try:
