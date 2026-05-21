@@ -13,6 +13,7 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 
+from inbox_scout.cloud_startup import cloud_startup
 from inbox_scout.env_loader import load_env, env_status, validate_telegram_env
 from inbox_scout.telegram_listener import run_once
 
@@ -43,7 +44,11 @@ _SHELL_EXE_NAMES = {"powershell.exe", "pwsh.exe", "cmd.exe", "explorer.exe", "wt
 
 
 def kill_stale_watchers() -> None:
-    """Kill stale Python telegram_watch processes. Never kills shells or parent launchers."""
+    """Kill stale Python telegram_watch processes on Windows. No-op on Linux/macOS."""
+    if sys.platform != "win32":
+        log("kill_stale_watchers: non-Windows platform — skipping (port lock handles dedup)")
+        return
+
     our_pid = os.getpid()
     venv_python = str((PROJECT_ROOT / ".venv" / "Scripts" / "python.exe").resolve()).lower()
     killed_any = False
@@ -105,7 +110,16 @@ def kill_stale_watchers() -> None:
 
 
 def refuse_global_python() -> bool:
-    expected = (PROJECT_ROOT / ".venv" / "Scripts" / "python.exe").resolve()
+    """Reject non-venv Python on Windows dev. No-op on cloud (no .venv present)."""
+    if sys.platform != "win32":
+        return False
+
+    venv_dir = PROJECT_ROOT / ".venv"
+    if not venv_dir.exists():
+        # No .venv — cloud or CI environment; allow any Python
+        return False
+
+    expected = (venv_dir / "Scripts" / "python.exe").resolve()
     actual = Path(sys.executable).resolve()
 
     if actual == expected:
@@ -128,6 +142,7 @@ def acquire_single_instance_lock() -> socket.socket:
 
 
 def main() -> None:
+    cloud_startup(print_fn=log)
     load_env()
     log(f"Env loaded. {env_status()}")
 
