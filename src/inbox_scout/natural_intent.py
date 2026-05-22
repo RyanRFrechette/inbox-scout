@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import json
+import math
 import re
 from pathlib import Path
 from typing import Any
@@ -25,7 +26,10 @@ from inbox_scout.trash_sender_block_runner import build_sender_block_runner_mess
 from inbox_scout.model_router import get_provider, set_provider, model_status_message, get_active_provider, OLLAMA_MODEL, OPENROUTER_MODEL
 from inbox_scout.mark_read_runner import build_mark_read_plan_message, build_mark_read_runner_message
 from inbox_scout.queue_decision import build_set_decision_message
-from inbox_scout.autopilot_cleanup import run_autopilot_cleanup, run_inbox_zero_autopilot, _is_digest_worthy
+from inbox_scout.autopilot_cleanup import (
+    run_autopilot_cleanup, run_inbox_zero_autopilot, _is_digest_worthy,
+    _get_modify_service_for_autopilot, _get_unread_inbox_count, _get_total_inbox_count,
+)
 from inbox_scout.natural_intent_llm import parse_intent, CONFIDENCE_THRESHOLD
 from inbox_scout.folder_explorer import (
     build_folder_counts_message,
@@ -40,12 +44,12 @@ LATEST_QUEUE = PROJECT_ROOT / "data" / "review_queue" / "latest_queue.json"
 _LLM_PENDING_PATH = PROJECT_ROOT / "config" / "llm_pending_action.json"
 
 
-def _save_pending_autopilot(original_text: str) -> None:
+def _save_pending_autopilot(original_text: str, scope: str | None = None) -> None:
+    payload: dict = {"pending": "inbox_zero_autopilot", "original_text": original_text}
+    if scope is not None:
+        payload["scope"] = scope
     _LLM_PENDING_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _LLM_PENDING_PATH.write_text(
-        json.dumps({"pending": "inbox_zero_autopilot", "original_text": original_text}),
-        encoding="utf-8",
-    )
+    _LLM_PENDING_PATH.write_text(json.dumps(payload), encoding="utf-8")
 
 
 def _get_pending_action() -> dict:
@@ -90,6 +94,12 @@ def _is_pending_autopilot_cancellation(msg: str) -> bool:
 
 def _execute_pending_autopilot(pending: dict, fallback_text: str) -> str:
     _orig = pending.get("original_text", fallback_text)
+    stored_scope = pending.get("scope")
+    if stored_scope == "both":
+        return _run_both_inbox_zero(_orig)
+    if stored_scope in ("primary", "secondary"):
+        return run_inbox_zero_autopilot(_orig, account=stored_scope)
+    # Legacy path (LLM-routed): derive scope from original text
     _scope = _parse_account(_orig)
     if _scope == "both":
         return _run_both_inbox_zero(_orig)
@@ -143,6 +153,67 @@ def _autopilot_confirm_prompt(text: str) -> str:
         f"Target: {_account_label(_acct)}\n\n"
         "Reply CONFIRM INBOX AUTOPILOT to start, or 'cancel autopilot' to cancel."
     )
+
+
+def _fetch_inbox_counts(account: str) -> tuple[int, int]:
+    """Return (unread, total) for the given account, or (-1, -1) on failure."""
+    try:
+        svc = _get_modify_service_for_autopilot(account)
+        return _get_unread_inbox_count(svc), _get_total_inbox_count(svc)
+    except Exception:
+        return -1, -1
+
+
+def _inbox_zero_preview_prompt(text: str) -> str:
+    """Fetch live inbox counts, save pending state, and return preview before scanning."""
+    _scope = _parse_account(text)
+    do_both = _scope in ("both", "unspecified")
+    resolved_scope = "both" if do_both else _scope
+    _save_pending_autopilot(text, scope=resolved_scope)
+
+    parts: list[str] = []
+    if do_both:
+        parts.append("Ready to sort both inboxes.")
+        p_unread, p_total = _fetch_inbox_counts("primary")
+        s_unread, s_total = _fetch_inbox_counts("secondary")
+        count_lines: list[str] = []
+        if p_unread >= 0:
+            count_lines.append(
+                f"Primary (ryanrjfrechette@gmail.com): {p_unread} unread of {p_total} total"
+            )
+        if s_unread >= 0:
+            count_lines.append(
+                f"Secondary (ryanrfrechette@gmail.com): {s_unread} unread of {s_total} total"
+            )
+        if count_lines:
+            total_unread = max(p_unread, 0) + max(s_unread, 0)
+            total_emails = max(p_total, 0) + max(s_total, 0)
+            count_lines.append(f"Total: {total_unread} unread across {total_emails} emails")
+            parts.append("\n".join(count_lines))
+            batches = max(1, math.ceil(total_unread / 25)) if total_unread > 0 else 1
+            parts.append(f"~{batches} batch{'es' if batches != 1 else ''} — a few minutes.")
+        else:
+            parts.append("Couldn't load live counts — will scan full inbox.")
+    else:
+        acct_label = "primary" if _scope == "primary" else "secondary"
+        email = (
+            "ryanrjfrechette@gmail.com" if _scope == "primary" else "ryanrfrechette@gmail.com"
+        )
+        parts.append(f"Ready to sort {acct_label} inbox.")
+        unread, total = _fetch_inbox_counts(_scope)
+        if unread >= 0:
+            parts.append(f"{acct_label.capitalize()} ({email}): {unread} unread of {total} total")
+            batches = max(1, math.ceil(unread / 25)) if unread > 0 else 1
+            parts.append(f"~{batches} batch{'es' if batches != 1 else ''} — a few minutes.")
+        else:
+            parts.append("Couldn't load live counts — will scan full inbox.")
+
+    parts.append(
+        "Protected and manual-review emails will not be archived,"
+        " marked read, trashed, or deleted."
+    )
+    parts.append("Reply yes to start, or cancel.")
+    return "\n\n".join(parts)
 
 
 _DIGEST_BUCKET_MAP: dict = {
@@ -792,10 +863,7 @@ def handle_natural_message(text: str) -> str:
         return sort_plan_message(text, cleanup=True)
 
     if _is_inbox_zero(msg):
-        _scope = _parse_account(text)
-        if _scope in ("both", "unspecified"):
-            return _run_both_inbox_zero(text)
-        return run_inbox_zero_autopilot(text, account=_scope)
+        return _inbox_zero_preview_prompt(text)
 
     if _is_autopilot_cleanup(msg):
         _scope = _parse_account(text)

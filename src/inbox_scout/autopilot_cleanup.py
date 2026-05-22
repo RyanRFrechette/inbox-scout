@@ -95,7 +95,10 @@ def _is_routine_shopping(item: dict) -> bool:
 def _is_digest_worthy(item: dict) -> bool:
     if _is_routine_shopping(item):
         return False
-    if item.get("manual_review") or item.get("local_decision") == "protected_review":
+    # Align with _item_is_protected_for_autopilot: catch all protected variants
+    if item.get("manual_review") or item.get("manual_review_required"):
+        return True
+    if "protected" in _norm_cat(item.get("local_decision")):
         return True
     cat = (item.get("category") or "").strip()
     return cat in _DIGEST_IMPORTANT_CATEGORIES

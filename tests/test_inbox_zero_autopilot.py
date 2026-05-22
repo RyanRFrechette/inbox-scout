@@ -21,17 +21,14 @@ class TestInboxZeroRouting(unittest.TestCase):
     def _assert_routes_to_inbox_zero(self, phrase: str) -> None:
         from inbox_scout import natural_intent
 
-        called = []
-
-        def fake_both(text: str) -> str:
-            called.append(text)
-            return "inbox_zero called"
-
-        with patch("inbox_scout.natural_intent._run_both_inbox_zero", fake_both):
+        with patch(
+            "inbox_scout.natural_intent._inbox_zero_preview_prompt",
+            return_value="INBOX_ZERO_PREVIEW",
+        ) as mock_preview:
             result = natural_intent.handle_natural_message(phrase)
 
-        self.assertEqual(result, "inbox_zero called", f"Expected inbox-zero autopilot for: {phrase!r}")
-        self.assertEqual(len(called), 1)
+        self.assertEqual(result, "INBOX_ZERO_PREVIEW", f"Expected inbox-zero preview for: {phrase!r}")
+        mock_preview.assert_called_once()
 
     def test_sort_all(self):
         self._assert_routes_to_inbox_zero("sort all")
@@ -67,15 +64,19 @@ class TestInboxZeroRouting(unittest.TestCase):
 
         self.assertEqual(sort_plan_calls, [], "sort_plan_message must not be called for 'sort all'")
 
-    def test_sort_all_response_has_no_yes_prompt(self):
+    def test_sort_all_response_is_preview_not_sort_plan(self):
+        """sort all must return a yes/cancel preview, not the sort-plan 'scan first 5' message."""
         from inbox_scout import natural_intent
 
-        with patch("inbox_scout.natural_intent.run_inbox_zero_autopilot", return_value="Inbox Zero complete."):
+        with patch(
+            "inbox_scout.natural_intent._inbox_zero_preview_prompt",
+            return_value="Reply yes to start, or cancel.",
+        ):
             result = natural_intent.handle_natural_message("sort all")
 
-        self.assertNotIn("reply yes", result.lower())
         self.assertNotIn("scan the first 5", result.lower())
         self.assertNotIn("scan 5 unread", result.lower())
+        self.assertIn("yes", result.lower())
 
     def test_clean_my_inbox_still_routes_to_autopilot_cleanup(self):
         """clean my inbox (no 'whole') must stay on run_autopilot_cleanup, not inbox-zero."""
@@ -104,47 +105,41 @@ class TestInboxZeroRouting(unittest.TestCase):
 class TestInboxZeroAccountRouting(unittest.TestCase):
     """Bare sort all defaults to both; explicit primary/secondary routes to one account."""
 
-    def test_sort_all_routes_to_both_accounts(self):
+    def test_sort_all_shows_preview_for_both_accounts(self):
         from inbox_scout import natural_intent
-        called = []
 
-        def fake_both(text):
-            called.append("both")
-            return "both called"
-
-        with patch("inbox_scout.natural_intent._run_both_inbox_zero", fake_both):
+        with patch(
+            "inbox_scout.natural_intent._inbox_zero_preview_prompt",
+            return_value="PREVIEW",
+        ) as mock_preview:
             result = natural_intent.handle_natural_message("sort all")
 
-        self.assertEqual(called, ["both"], "bare 'sort all' must route to both accounts")
-        self.assertEqual(result, "both called")
+        mock_preview.assert_called_once()
+        self.assertEqual(result, "PREVIEW")
 
-    def test_sort_primary_routes_to_primary_only(self):
+    def test_sort_primary_shows_preview(self):
         from inbox_scout import natural_intent
-        accounts = []
 
-        def fake_single(text, account="primary"):
-            accounts.append(account)
-            return f"single called {account}"
-
-        with patch("inbox_scout.natural_intent.run_inbox_zero_autopilot", fake_single):
+        with patch(
+            "inbox_scout.natural_intent._inbox_zero_preview_prompt",
+            return_value="PRIMARY_PREVIEW",
+        ) as mock_preview:
             result = natural_intent.handle_natural_message("sort all primary email")
 
-        self.assertEqual(accounts, ["primary"])
-        self.assertIn("primary", result)
+        mock_preview.assert_called_once_with("sort all primary email")
+        self.assertEqual(result, "PRIMARY_PREVIEW")
 
-    def test_sort_secondary_routes_to_secondary_only(self):
+    def test_sort_secondary_shows_preview(self):
         from inbox_scout import natural_intent
-        accounts = []
 
-        def fake_single(text, account="primary"):
-            accounts.append(account)
-            return f"single called {account}"
-
-        with patch("inbox_scout.natural_intent.run_inbox_zero_autopilot", fake_single):
+        with patch(
+            "inbox_scout.natural_intent._inbox_zero_preview_prompt",
+            return_value="SEC_PREVIEW",
+        ) as mock_preview:
             result = natural_intent.handle_natural_message("sort all secondary email")
 
-        self.assertEqual(accounts, ["secondary"])
-        self.assertIn("secondary", result)
+        mock_preview.assert_called_once_with("sort all secondary email")
+        self.assertEqual(result, "SEC_PREVIEW")
 
 
 class TestInboxZeroCap(unittest.TestCase):
@@ -1168,6 +1163,124 @@ class TestRunnerAllowsInboxTarget(unittest.TestCase):
             self.assertEqual(sp["target"], "inbox", f"All saved plans must have target='inbox', got {sp}")
             self.assertTrue(sp["sort_all"], f"All saved plans must have sort_all=True, got {sp}")
             self.assertEqual(sp["requested_limit"], 25, f"requested_limit must be 25, got {sp}")
+
+
+class TestInboxZeroPreviewFlow(unittest.TestCase):
+    """sort all must show a live-count preview before running the autopilot."""
+
+    def test_sort_all_returns_preview_not_autopilot(self):
+        from inbox_scout import natural_intent
+        with patch("inbox_scout.natural_intent._run_both_inbox_zero") as mock_run, \
+             patch("inbox_scout.natural_intent._fetch_inbox_counts", return_value=(5, 20)), \
+             patch("inbox_scout.natural_intent._save_pending_autopilot"):
+            result = natural_intent.handle_natural_message("sort all")
+        mock_run.assert_not_called()
+        self.assertIn("yes", result.lower())
+
+    def test_preview_contains_safety_note(self):
+        from inbox_scout import natural_intent
+        with patch("inbox_scout.natural_intent._fetch_inbox_counts", return_value=(5, 20)), \
+             patch("inbox_scout.natural_intent._save_pending_autopilot"):
+            result = natural_intent.handle_natural_message("sort all")
+        self.assertIn("protected", result.lower())
+        self.assertIn("not", result.lower())
+
+    def test_preview_shows_live_counts(self):
+        from inbox_scout import natural_intent
+        with patch("inbox_scout.natural_intent._fetch_inbox_counts", return_value=(7, 30)), \
+             patch("inbox_scout.natural_intent._save_pending_autopilot"):
+            result = natural_intent.handle_natural_message("sort all")
+        self.assertIn("7", result)
+        self.assertIn("30", result)
+
+    def test_preview_saves_pending_with_scope_both(self):
+        from inbox_scout import natural_intent
+        with patch("inbox_scout.natural_intent._fetch_inbox_counts", return_value=(-1, -1)), \
+             patch("inbox_scout.natural_intent._save_pending_autopilot") as mock_save:
+            natural_intent.handle_natural_message("sort all")
+        mock_save.assert_called_once()
+        args, kwargs = mock_save.call_args
+        # Second positional or keyword arg should be scope="both"
+        scope_arg = kwargs.get("scope") or (args[1] if len(args) > 1 else None)
+        self.assertEqual(scope_arg, "both")
+
+    def test_counts_unavailable_no_raw_negative_one(self):
+        from inbox_scout import natural_intent
+        with patch("inbox_scout.natural_intent._fetch_inbox_counts", return_value=(-1, -1)), \
+             patch("inbox_scout.natural_intent._save_pending_autopilot"):
+            result = natural_intent.handle_natural_message("sort all")
+        self.assertNotIn("-1", result)
+        self.assertIn("yes", result.lower())
+
+    def test_yes_after_preview_runs_both_accounts(self):
+        """After sort-all preview (scope stored as both), yes must run both-account autopilot."""
+        from inbox_scout import natural_intent
+        with patch("inbox_scout.natural_intent._get_pending_action",
+                   return_value={"pending": "inbox_zero_autopilot",
+                                 "original_text": "sort all", "scope": "both"}), \
+             patch("inbox_scout.natural_intent._clear_pending_action"), \
+             patch("inbox_scout.natural_intent._run_both_inbox_zero",
+                   return_value="BOTH_RAN") as mock_both:
+            result = natural_intent.handle_natural_message("yes")
+        mock_both.assert_called_once_with("sort all")
+        self.assertEqual(result, "BOTH_RAN")
+
+    def test_yes_after_primary_preview_runs_primary_only(self):
+        from inbox_scout import natural_intent
+        with patch("inbox_scout.natural_intent._get_pending_action",
+                   return_value={"pending": "inbox_zero_autopilot",
+                                 "original_text": "sort all primary email", "scope": "primary"}), \
+             patch("inbox_scout.natural_intent._clear_pending_action"), \
+             patch("inbox_scout.natural_intent.run_inbox_zero_autopilot",
+                   return_value="PRIMARY_RAN") as mock_single:
+            result = natural_intent.handle_natural_message("yes")
+        mock_single.assert_called_once_with("sort all primary email", account="primary")
+        self.assertEqual(result, "PRIMARY_RAN")
+
+    def test_cancel_after_preview_clears_pending(self):
+        from inbox_scout import natural_intent
+        with patch("inbox_scout.natural_intent._get_pending_action",
+                   return_value={"pending": "inbox_zero_autopilot",
+                                 "original_text": "sort all", "scope": "both"}), \
+             patch("inbox_scout.natural_intent._clear_pending_action") as mock_clear:
+            result = natural_intent.handle_natural_message("cancel")
+        mock_clear.assert_called_once()
+        self.assertIn("Cancelled", result)
+
+
+class TestIsDigestWorthy(unittest.TestCase):
+    """_is_digest_worthy must match the same items that _item_is_protected_for_autopilot skips."""
+
+    def setUp(self):
+        from inbox_scout.autopilot_cleanup import _is_digest_worthy
+        self.check = _is_digest_worthy
+
+    def test_manual_review_true_is_worthy(self):
+        self.assertTrue(self.check({"manual_review": True, "category": "newsletter"}))
+
+    def test_manual_review_required_true_is_worthy(self):
+        self.assertTrue(self.check({"manual_review_required": True, "category": "newsletter"}))
+
+    def test_protected_review_local_decision_is_worthy(self):
+        self.assertTrue(self.check({"local_decision": "protected_review", "category": "unknown"}))
+
+    def test_protected_local_decision_is_worthy(self):
+        """local_decision='protected' (not 'protected_review') must now be caught."""
+        self.assertTrue(self.check({"local_decision": "protected", "category": "unknown"}))
+
+    def test_important_category_without_protected_flag_is_worthy(self):
+        self.assertTrue(self.check({"category": "InboxScout/Finance", "local_decision": ""}))
+
+    def test_routine_shopping_excluded_even_with_manual_review_required(self):
+        self.assertFalse(self.check({
+            "manual_review_required": True,
+            "from": "auto-confirm@amazon.com",
+            "subject": "Your order has shipped",
+            "category": "newsletter",
+        }))
+
+    def test_plain_newsletter_not_worthy(self):
+        self.assertFalse(self.check({"category": "newsletter", "local_decision": ""}))
 
 
 if __name__ == "__main__":
