@@ -17,11 +17,20 @@ services:
         sync: false       # base64-encoded token_modify.json — decoded at startup
       - key: OPENROUTER_API_KEY
         sync: false       # optional — AI classifier; falls back to rule-based if not set
+      - key: ENABLE_TELEGRAM_WATCHER
+        sync: false       # must be explicitly set to "true" to start the cloud watcher
     disk:
       name: inbox-scout-data
       mountPath: /opt/render/project/src/data
       sizeGB: 1
 
+# Watcher mode — local vs. cloud:
+#   The local Windows watcher (started via Start-InboxScoutTelegramWatcher) is the primary
+#   Atlas interface. The cloud watcher on Render is disabled by default: telegram_watch.py
+#   exits immediately on Linux unless ENABLE_TELEGRAM_WATCHER=true is set.
+#   Only set ENABLE_TELEGRAM_WATCHER=true on Render if intentionally switching Atlas to
+#   hosted mode. Running both simultaneously causes duplicate Telegram replies (409 conflict).
+#
 # Deployment notes:
 #
 # Token setup:
