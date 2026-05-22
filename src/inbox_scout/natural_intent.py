@@ -30,6 +30,7 @@ from inbox_scout.queue_decision import build_set_decision_message
 from inbox_scout.autopilot_cleanup import (
     run_autopilot_cleanup, run_inbox_zero_autopilot, _is_digest_worthy,
     _get_modify_service_for_autopilot, _get_unread_inbox_count, _get_total_inbox_count,
+    AUTOPILOT_MAX_LIMIT,
 )
 from inbox_scout.natural_intent_llm import parse_intent, CONFIDENCE_THRESHOLD
 from inbox_scout.folder_explorer import (
@@ -163,6 +164,27 @@ def _fetch_inbox_counts(account: str) -> tuple[int, int]:
         return _get_unread_inbox_count(svc), _get_total_inbox_count(svc)
     except Exception:
         return -1, -1
+
+
+def _run_autonomous_cleanup(text: str, account: str = "primary") -> str:
+    """Run cleanup autonomously: fetch count, compute ETA, run cleanup, return combined result."""
+    unread, _ = _fetch_inbox_counts(account)
+    if unread > 0:
+        batch = min(unread, AUTOPILOT_MAX_LIMIT)
+        eta_secs = batch * 10
+        if eta_secs < 60:
+            eta_str = f"about {eta_secs} seconds"
+        else:
+            eta_mins = math.ceil(eta_secs / 60)
+            eta_str = f"about {eta_mins} minute{'s' if eta_mins != 1 else ''}"
+        header = (
+            f"Found {unread} unread email{'s' if unread != 1 else ''}. "
+            f"Estimated completion: {eta_str}.\n\n"
+        )
+    else:
+        header = ""
+    result = run_autopilot_cleanup(text, account=account)
+    return header + result if header else result
 
 
 def _inbox_zero_preview_prompt(text: str) -> str:
@@ -523,6 +545,9 @@ _AUTOPILOT_PHRASES = [
     "clean inbox",
     "clean up a batch",
     "clean a batch",
+    "clean all",
+    "clean up",
+    "cleanup",
 ]
 
 
@@ -534,7 +559,6 @@ def _is_autopilot_cleanup(msg: str) -> bool:
 
 _INBOX_ZERO_PHRASES = [
     "sort all",
-    "clean all",
     "get me to inbox zero",
     "file my inbox",
     "sort my whole inbox",
@@ -871,7 +895,7 @@ def handle_natural_message(text: str) -> str:
         if _scope == "both":
             return _run_both_autopilot_cleanup(text)
         _account = "primary" if _scope == "unspecified" else _scope
-        return run_autopilot_cleanup(text, account=_account)
+        return _run_autonomous_cleanup(text, account=_account)
 
     if any(phrase in msg for phrase in ["next", "next review", "needs review", "what needs my attention"]):
         return next_review_item()

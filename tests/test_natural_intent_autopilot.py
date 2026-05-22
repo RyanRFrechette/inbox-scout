@@ -61,6 +61,46 @@ class TestAutopilotRouting(unittest.TestCase):
     def test_clean_a_batch(self):
         self._assert_routes_to_autopilot("clean a batch")
 
+    def test_cleanup_bare(self):
+        self._assert_routes_to_autopilot("cleanup")
+
+    def test_clean_up_bare(self):
+        self._assert_routes_to_autopilot("clean up")
+
+    def test_clean_all_routes_to_autopilot(self):
+        self._assert_routes_to_autopilot("clean all")
+
+    def test_cleanup_does_not_return_yes_cancel_prompt(self):
+        from inbox_scout import natural_intent
+        with patch("inbox_scout.natural_intent.run_autopilot_cleanup", return_value="Scanned 5 — 5 protected."):
+            result = natural_intent.handle_natural_message("cleanup")
+        self.assertNotIn("say yes", result.lower())
+        self.assertNotIn("say cancel", result.lower())
+
+    def test_cleanup_status_not_routed_to_autopilot(self):
+        from inbox_scout import natural_intent
+        called = []
+        with patch("inbox_scout.natural_intent.run_autopilot_cleanup", side_effect=lambda *a, **kw: called.append(1) or ""), \
+             patch("inbox_scout.natural_intent.build_cleanup_status_message", return_value="status ok"):
+            result = natural_intent.handle_natural_message("cleanup status")
+        self.assertEqual(result, "status ok")
+        self.assertEqual(len(called), 0, "run_autopilot_cleanup must not fire for 'cleanup status'")
+
+    def test_autonomous_cleanup_includes_eta_when_unread_known(self):
+        from inbox_scout import natural_intent
+        with patch("inbox_scout.natural_intent._fetch_inbox_counts", return_value=(20, 50)), \
+             patch("inbox_scout.natural_intent.run_autopilot_cleanup", return_value="Done."):
+            result = natural_intent._run_autonomous_cleanup("cleanup")
+        self.assertIn("20 unread", result)
+        self.assertIn("minute", result)
+
+    def test_autonomous_cleanup_skips_eta_when_count_unavailable(self):
+        from inbox_scout import natural_intent
+        with patch("inbox_scout.natural_intent._fetch_inbox_counts", return_value=(-1, -1)), \
+             patch("inbox_scout.natural_intent.run_autopilot_cleanup", return_value="Done."):
+            result = natural_intent._run_autonomous_cleanup("cleanup")
+        self.assertEqual(result, "Done.")
+
     def test_is_autopilot_cleanup_helper(self):
         from inbox_scout.natural_intent import _is_autopilot_cleanup
 
@@ -72,6 +112,9 @@ class TestAutopilotRouting(unittest.TestCase):
         self.assertTrue(_is_autopilot_cleanup("clean the next 25"))
         self.assertTrue(_is_autopilot_cleanup("clean up a batch"))
         self.assertTrue(_is_autopilot_cleanup("clean a batch"))
+        self.assertTrue(_is_autopilot_cleanup("cleanup"))
+        self.assertTrue(_is_autopilot_cleanup("clean up"))
+        self.assertTrue(_is_autopilot_cleanup("clean all"))
 
         # These should NOT trigger autopilot
         self.assertFalse(_is_autopilot_cleanup("yes"))
