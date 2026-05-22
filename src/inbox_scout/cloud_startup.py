@@ -30,6 +30,8 @@ def _default_token_paths() -> dict[str, Path]:
     return {
         "GMAIL_TOKEN_JSON": root / "token.json",
         "GMAIL_TOKEN_MODIFY_JSON": root / "token_modify.json",
+        "GMAIL_TOKEN_SECONDARY_JSON": root / "tokens" / "secondary_readonly.json",
+        "GMAIL_TOKEN_SECONDARY_MODIFY_JSON": root / "tokens" / "secondary_modify.json",
     }
 
 
