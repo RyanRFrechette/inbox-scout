@@ -1,4 +1,4 @@
-name: Deploy to DigitalOcean
+name: Deploy to Droplet
 
 on:
   push:
@@ -9,10 +9,13 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Install doctl
-        uses: digitalocean/action-doctl@v2
+      - name: SSH deploy
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
-
-      - name: Trigger App Platform redeploy
-        run: doctl apps create-deployment ${{ secrets.DIGITALOCEAN_APP_ID }} --wait
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USER }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          script: |
+            cd /opt/inbox-scout
+            git pull --ff-only origin master
+            systemctl restart inbox-scout.service

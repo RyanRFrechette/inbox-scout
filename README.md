@@ -449,16 +449,17 @@ The worker auto-decodes token env vars to disk on startup (only if the files are
 
 ### 3b. Auto-deploy on push (GitHub Actions)
 
-A workflow at `.github/workflows/deploy.yml` triggers a DigitalOcean App Platform redeploy automatically on every push to `master`.
+A workflow at `.github/workflows/deploy.yml` SSHs into the Droplet and restarts the systemd service on every push to `master`.
 
-**Required GitHub secrets** (Settings → Secrets → Actions):
+**Required GitHub secrets** (Settings → Secrets and variables → Actions → New repository secret):
 
-| Secret | How to get it |
-|--------|--------------|
-| `DIGITALOCEAN_ACCESS_TOKEN` | DigitalOcean dashboard → API → Personal Access Tokens → Generate Token (write scope) |
-| `DIGITALOCEAN_APP_ID` | `doctl apps list` or the App Platform URL: `cloud.digitalocean.com/apps/<APP_ID>` |
+| Secret | Value |
+|--------|-------|
+| `DROPLET_HOST` | Droplet IP address or hostname |
+| `DROPLET_USER` | SSH user on the Droplet (e.g. `root`) |
+| `DROPLET_SSH_KEY` | Private SSH key whose public half is in `~/.ssh/authorized_keys` on the Droplet |
 
-**To test after adding secrets:** push any commit to `master` and check the Actions tab in GitHub — the "Deploy to DigitalOcean" workflow should appear, run, and pass. Then send `status` in Telegram to confirm the new worker is live.
+**To test after adding secrets:** push any commit to `master`, check the Actions tab in GitHub — the "Deploy to Droplet" workflow should run and pass. Then send `status` in Telegram to confirm the restarted worker is live.
 
 ### 4. Verify deployment
 
