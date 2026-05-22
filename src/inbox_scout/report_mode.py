@@ -122,40 +122,60 @@ def classify_for_report(emails):
     results = []
     total = len(emails)
 
-    provider = get_active_provider(batch_size=total)
-    model = OPENROUTER_MODEL if provider == "openrouter" else OLLAMA_MODEL
+    try:
+        provider = get_active_provider(batch_size=total)
+        model = OPENROUTER_MODEL if provider == "openrouter" else OLLAMA_MODEL
+    except Exception:
+        provider = "local"
+        model = OLLAMA_MODEL
     console.print(f"Scanning {total} email(s) using {provider}: {model}...")
 
     for index, email in enumerate(emails, start=1):
-        subject = str(email.get("subject") or "(no subject)")[:80]
-        console.print(f"[dim]Classifying {index}/{total}: {subject}[/dim]")
-
-        rule_result = classify_email(email, rules, protected_terms, protected_senders)
-
         try:
-            ai_result = classify_with_ai(email, rule_result, batch_size=total)
-        except Exception as e:
-            console.print(f"[yellow]AI classifier failed on {index}/{total}; using rule fallback. Error: {e}[/yellow]")
+            subject = str(email.get("subject") or "(no subject)")[:80]
+            console.print(f"[dim]Classifying {index}/{total}: {subject}[/dim]")
 
-            ai_result = {
-                "category": rule_result.get("category", "Manual review"),
-                "confidence_score": rule_result.get("confidence_score", 50),
-                "risk_score": rule_result.get("risk_score", 80),
-                "manual_review": rule_result.get("manual_review", True),
-                "suggested_action": rule_result.get("suggested_action", "Manual review."),
-                "reason": "AI classifier timeout/error. Used rule-based fallback."
-            }
+            rule_result = classify_email(email, rules, protected_terms, protected_senders)
 
-        category = ai_result.get("category", "unknown")
-        risk = ai_result.get("risk_score", "?")
-        decision = "manual" if ai_result.get("manual_review") else "ok"
-        console.print(f"[{index}/{total}] {category} | risk {risk} | {decision}")
+            try:
+                ai_result = classify_with_ai(email, rule_result, batch_size=total)
+            except Exception as e:
+                console.print(f"[yellow]AI classifier failed on {index}/{total}; using rule fallback. Error: {e}[/yellow]")
 
-        results.append({
-            **email,
-            "rule_classification": rule_result,
-            "ai_classification": ai_result
-        })
+                ai_result = {
+                    "category": rule_result.get("category", "Manual review"),
+                    "confidence_score": rule_result.get("confidence_score", 50),
+                    "risk_score": rule_result.get("risk_score", 80),
+                    "manual_review": rule_result.get("manual_review", True),
+                    "suggested_action": rule_result.get("suggested_action", "Manual review."),
+                    "reason": "AI classifier timeout/error. Used rule-based fallback."
+                }
+
+            category = ai_result.get("category", "unknown")
+            risk = ai_result.get("risk_score", "?")
+            decision = "manual" if ai_result.get("manual_review") else "ok"
+            console.print(f"[{index}/{total}] {category} | risk {risk} | {decision}")
+
+            results.append({
+                **email,
+                "rule_classification": rule_result,
+                "ai_classification": ai_result
+            })
+
+        except Exception as outer_e:
+            console.print(f"[red]Email {index}/{total} classification failed entirely; marking as manual review. Error: {outer_e}[/red]")
+            results.append({
+                **email,
+                "rule_classification": {"manual_review": True, "risk_score": 99, "category": "Manual review"},
+                "ai_classification": {
+                    "category": "Manual review",
+                    "risk_score": 99,
+                    "manual_review": True,
+                    "suggested_action": "Manual review.",
+                    "reason": "ai_provider_error",
+                    "confidence_score": 0,
+                },
+            })
 
     console.print(f"[dim]Finished classifying {len(results)} email(s)[/dim]")
     return results

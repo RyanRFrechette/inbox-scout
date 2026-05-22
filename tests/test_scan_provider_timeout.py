@@ -95,5 +95,72 @@ class TestScanTimeout(unittest.TestCase):
         self.assertIn("read-only", result.lower())
 
 
+class TestClassifyForReportResilience(unittest.TestCase):
+    """Prove classify_for_report survives rule or AI classification exceptions per email."""
+
+    def _fake_email(self):
+        return {"message_id": "abc123", "from": "x@example.com", "subject": "Test", "date": "", "snippet": ""}
+
+    def test_rule_classifier_exception_produces_manual_review(self):
+        from inbox_scout import report_mode
+        email = self._fake_email()
+        with patch.object(report_mode, "load_json", return_value={}), \
+             patch.object(report_mode, "load_lines", return_value=[]), \
+             patch.object(report_mode, "get_active_provider", return_value="local"), \
+             patch.object(report_mode, "OLLAMA_MODEL", "qwen3:8b"), \
+             patch.object(report_mode, "classify_email", side_effect=RuntimeError("rule crash")):
+            results = report_mode.classify_for_report([email])
+        self.assertEqual(len(results), 1)
+        ai = results[0]["ai_classification"]
+        self.assertTrue(ai.get("manual_review"), "failed email must be manual_review=True")
+        self.assertGreaterEqual(ai.get("risk_score", 0), 99, "failed email must have max risk")
+        self.assertEqual(ai.get("reason"), "ai_provider_error")
+
+    def test_ai_classifier_exception_uses_rule_fallback(self):
+        from inbox_scout import report_mode
+        email = self._fake_email()
+        rule_result = {"category": "Newsletter", "risk_score": 40, "manual_review": False, "confidence_score": 70, "suggested_action": "Archive."}
+        with patch.object(report_mode, "load_json", return_value={}), \
+             patch.object(report_mode, "load_lines", return_value=[]), \
+             patch.object(report_mode, "get_active_provider", return_value="local"), \
+             patch.object(report_mode, "OLLAMA_MODEL", "qwen3:8b"), \
+             patch.object(report_mode, "classify_email", return_value=rule_result), \
+             patch.object(report_mode, "classify_with_ai", side_effect=ConnectionError("provider down")):
+            results = report_mode.classify_for_report([email])
+        self.assertEqual(len(results), 1)
+        ai = results[0]["ai_classification"]
+        self.assertEqual(ai.get("category"), "Newsletter")
+        self.assertIn("fallback", ai.get("reason", "").lower())
+
+    def test_provider_lookup_exception_falls_back_to_local(self):
+        from inbox_scout import report_mode
+        email = self._fake_email()
+        rule_result = {"category": "Newsletter", "risk_score": 20, "manual_review": False, "confidence_score": 80, "suggested_action": "Archive."}
+        ai_result = {**rule_result, "reason": "ok"}
+        with patch.object(report_mode, "load_json", return_value={}), \
+             patch.object(report_mode, "load_lines", return_value=[]), \
+             patch.object(report_mode, "get_active_provider", side_effect=RuntimeError("env broken")), \
+             patch.object(report_mode, "OLLAMA_MODEL", "qwen3:8b"), \
+             patch.object(report_mode, "classify_email", return_value=rule_result), \
+             patch.object(report_mode, "classify_with_ai", return_value=ai_result):
+            results = report_mode.classify_for_report([email])
+        self.assertEqual(len(results), 1)
+
+    def test_failed_email_never_produces_trash_candidate(self):
+        from inbox_scout import report_mode
+        email = self._fake_email()
+        with patch.object(report_mode, "load_json", return_value={}), \
+             patch.object(report_mode, "load_lines", return_value=[]), \
+             patch.object(report_mode, "get_active_provider", return_value="local"), \
+             patch.object(report_mode, "OLLAMA_MODEL", "qwen3:8b"), \
+             patch.object(report_mode, "classify_email", side_effect=RuntimeError("crash")):
+            results = report_mode.classify_for_report([email])
+        ai = results[0]["ai_classification"]
+        action = ai.get("suggested_action", "").lower()
+        self.assertNotIn("trash", action)
+        self.assertNotIn("archive", action)
+        self.assertNotIn("mark read", action)
+
+
 if __name__ == "__main__":
     unittest.main()
