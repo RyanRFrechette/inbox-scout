@@ -396,24 +396,42 @@ class TestRunInboxZeroAutopilotFullInbox(unittest.TestCase):
             ac.run_inbox_zero_autopilot("sort all")
         self.assertGreaterEqual(scan_calls[0], 3)
 
-    def test_stops_when_unread_zero(self):
+    def test_stops_when_unread_zero_inbox_empty(self):
         from inbox_scout import autopilot_cleanup as ac
-        mock_plan = MagicMock()
-        mock_plan.workflow_mode = "commands_planned"
-        mock_plan.requested_limit = 25
         with unittest.mock.patch.multiple("inbox_scout.autopilot_cleanup",
                 _get_modify_service_for_autopilot=MagicMock(return_value=MagicMock()),
                 _get_unread_inbox_count=MagicMock(return_value=0),
                 _get_total_inbox_count=MagicMock(return_value=0),
-                build_scan_queue_plan=MagicMock(return_value=mock_plan),
-                save_plan=MagicMock(),
-                _run_scan=MagicMock(return_value=MagicMock(returncode=0)),
-                _load_json=MagicMock(return_value={"status": "complete"}),
-                _load_items_from_queue=MagicMock(return_value=[]),
                 _beep_once=MagicMock()):
             result = ac.run_inbox_zero_autopilot("sort all")
-        self.assertIn("Scanned: 0", result)
-        self.assertIn("Nothing permanently deleted", result)
+        self.assertIn("Inbox is empty", result)
+        self.assertIn("Gmail not touched", result)
+
+    def test_no_unread_but_read_emails_remain_singular(self):
+        from inbox_scout import autopilot_cleanup as ac
+        with unittest.mock.patch.multiple("inbox_scout.autopilot_cleanup",
+                _get_modify_service_for_autopilot=MagicMock(return_value=MagicMock()),
+                _get_unread_inbox_count=MagicMock(return_value=0),
+                _get_total_inbox_count=MagicMock(return_value=1),
+                _beep_once=MagicMock()):
+            result = ac.run_inbox_zero_autopilot("sort all")
+        self.assertIn("No unread inbox emails to process", result)
+        self.assertIn("1 read inbox email remain", result)
+        self.assertIn("Gmail not touched", result)
+        self.assertNotIn("error midway", result)
+        self.assertNotIn("Couldn't process", result)
+
+    def test_no_unread_but_read_emails_remain_plural(self):
+        from inbox_scout import autopilot_cleanup as ac
+        with unittest.mock.patch.multiple("inbox_scout.autopilot_cleanup",
+                _get_modify_service_for_autopilot=MagicMock(return_value=MagicMock()),
+                _get_unread_inbox_count=MagicMock(return_value=0),
+                _get_total_inbox_count=MagicMock(return_value=5),
+                _beep_once=MagicMock()):
+            result = ac.run_inbox_zero_autopilot("sort all")
+        self.assertIn("No unread inbox emails to process", result)
+        self.assertIn("5 read inbox emails remain", result)
+        self.assertIn("Gmail not touched", result)
 
     def test_emergency_cap_not_hit_for_2000_inbox(self):
         from inbox_scout import autopilot_cleanup as ac
@@ -508,8 +526,8 @@ class TestAutopilotLoopAlwaysPageOne(unittest.TestCase):
             patch.object(autopilot_cleanup, "_load_json", return_value={"status": "complete"}),
             patch.object(autopilot_cleanup, "_load_items_from_queue", return_value=[]),
             patch.object(autopilot_cleanup, "_get_modify_service_for_autopilot", return_value=MagicMock()),
-            patch.object(autopilot_cleanup, "_get_unread_inbox_count", return_value=0),
-            patch.object(autopilot_cleanup, "_get_total_inbox_count", return_value=0),
+            patch.object(autopilot_cleanup, "_get_unread_inbox_count", return_value=5),
+            patch.object(autopilot_cleanup, "_get_total_inbox_count", return_value=5),
         ):
             autopilot_cleanup.run_inbox_zero_autopilot("sort all")
 
@@ -538,8 +556,8 @@ class TestAutopilotLoopAlwaysPageOne(unittest.TestCase):
         ):
             result = autopilot_cleanup.run_inbox_zero_autopilot("sort all")
 
-        self.assertIn("Scanned: 0", result)
-        self.assertIn("Nothing permanently deleted", result)
+        self.assertIn("Inbox is empty", result)
+        self.assertIn("Gmail not touched", result)
 
 
 class TestLabelList(unittest.TestCase):
@@ -942,8 +960,8 @@ class TestRunnerAllowsInboxTarget(unittest.TestCase):
             unittest.mock.patch.object(ac, "_load_json", return_value={"status": "complete"}),
             unittest.mock.patch.object(ac, "_load_items_from_queue", return_value=[]),
             unittest.mock.patch.object(ac, "_get_modify_service_for_autopilot", return_value=MagicMock()),
-            unittest.mock.patch.object(ac, "_get_unread_inbox_count", return_value=0),
-            unittest.mock.patch.object(ac, "_get_total_inbox_count", return_value=0),
+            unittest.mock.patch.object(ac, "_get_unread_inbox_count", return_value=5),
+            unittest.mock.patch.object(ac, "_get_total_inbox_count", return_value=5),
             unittest.mock.patch.object(ac, "_beep_once"),
         ):
             ac.run_inbox_zero_autopilot("sort all")

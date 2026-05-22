@@ -644,6 +644,16 @@ def run_inbox_zero_autopilot(text: str, account: str = "primary", _collect: list
     initial_unread = _get_unread_inbox_count(service)
     initial_total = _get_total_inbox_count(service)
 
+    if initial_unread == 0:
+        _beep_once()
+        if initial_total == 0:
+            return "Inbox is empty. Gmail not touched."
+        read_word = "email" if initial_total == 1 else "emails"
+        return (
+            f"No unread inbox emails to process. "
+            f"{initial_total} read inbox {read_word} remain.\n\nGmail not touched."
+        )
+
     label_cache: dict = {}
     cursor_path = PLANS_DIR / "latest_gmail_scan_cursor.json"
 
