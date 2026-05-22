@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import math
 import threading
 import traceback
 from datetime import datetime
@@ -10,6 +11,12 @@ from typing import Any
 
 import requests
 
+from inbox_scout.autopilot_cleanup import (
+    run_inbox_zero_autopilot,
+    _get_modify_service_for_autopilot,
+    _get_unread_inbox_count,
+    AUTOPILOT_MAX_LIMIT,
+)
 from inbox_scout.telegram_notifier import load_config, load_token, send_message
 from inbox_scout.telegram_status import build_status_message
 from inbox_scout.telegram_approval import evaluate_approval_command
@@ -40,6 +47,51 @@ _RESORT_PREVIEW_PHRASES = [
     "show resort preview",
     "preview resort",
 ]
+
+_AUTONOMOUS_CLEANUP_PHRASES = frozenset({
+    "cleanup",
+    "clean up",
+    "clean all",
+    "clean my inbox",
+    "get me closer to inbox zero",
+})
+
+
+def _is_autonomous_cleanup_command(msg: str) -> bool:
+    return msg.strip() in _AUTONOMOUS_CLEANUP_PHRASES
+
+
+def _cleanup_eta_msg() -> str:
+    try:
+        svc = _get_modify_service_for_autopilot("primary")
+        unread = _get_unread_inbox_count(svc)
+    except Exception:
+        unread = -1
+    if unread < 0:
+        return "Starting inbox cleanup. This may take a few minutes.\n\nRead-only until you see the summary."
+    batches = max(1, math.ceil(unread / AUTOPILOT_MAX_LIMIT))
+    eta_mins = max(1, batches)
+    unread_word = "email" if unread == 1 else "emails"
+    mins_word = "minute" if eta_mins == 1 else "minutes"
+    return (
+        f"There are {unread} unread {unread_word}. "
+        f"Estimated completion time: about {eta_mins} {mins_word}."
+    )
+
+
+def _cleanup_thread(cmd_text: str) -> None:
+    try:
+        reply = run_inbox_zero_autopilot(cmd_text)
+    except Exception as exc:
+        _log_error(f"cleanup thread error for {cmd_text!r}:\n{traceback.format_exc()}")
+        reply = (
+            f"Cleanup stopped unexpectedly. {type(exc).__name__}: {exc}\n\n"
+            "No further action was taken. Gmail not touched."
+        )
+    try:
+        send_message(reply)
+    except Exception as se:
+        _log_error(f"cleanup send failed: {type(se).__name__}: {se}")
 
 
 def _log_error(msg: str) -> None:
@@ -267,9 +319,17 @@ def run_once() -> None:
 
         print(f"Command received: {text}")
         _msg_lower = text.lower()
+        is_autonomous_cleanup = _is_autonomous_cleanup_command(_msg_lower)
         is_resort_run = any(phrase in _msg_lower for phrase in _RESORT_RUN_PHRASES)
         is_resort_preview = any(phrase in _msg_lower for phrase in _RESORT_PREVIEW_PHRASES)
-        if is_resort_run or is_resort_preview:
+        if is_autonomous_cleanup:
+            eta_msg = _cleanup_eta_msg()
+            try:
+                send_message(eta_msg)
+            except Exception:
+                pass
+            threading.Thread(target=_cleanup_thread, args=(text,), daemon=True).start()
+        elif is_resort_run or is_resort_preview:
             if is_resort_run:
                 ack = "Got it — scanning your sorted folders and applying safe label corrections. Labels only, no trash or delete."
             else:
