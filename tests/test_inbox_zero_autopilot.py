@@ -416,7 +416,7 @@ class TestRunInboxZeroAutopilotFullInbox(unittest.TestCase):
                 _beep_once=MagicMock()):
             result = ac.run_inbox_zero_autopilot("sort all")
         self.assertIn("No unread inbox emails to process", result)
-        self.assertIn("1 read inbox email remain", result)
+        self.assertIn("1 read inbox email remains", result)
         self.assertIn("Gmail not touched", result)
         self.assertNotIn("error midway", result)
         self.assertNotIn("Couldn't process", result)

@@ -648,10 +648,10 @@ def run_inbox_zero_autopilot(text: str, account: str = "primary", _collect: list
         _beep_once()
         if initial_total == 0:
             return "Inbox is empty. Gmail not touched."
-        read_word = "email" if initial_total == 1 else "emails"
+        read_word, verb = ("email", "remains") if initial_total == 1 else ("emails", "remain")
         return (
             f"No unread inbox emails to process. "
-            f"{initial_total} read inbox {read_word} remain.\n\nGmail not touched."
+            f"{initial_total} read inbox {read_word} {verb}.\n\nGmail not touched."
         )
 
     label_cache: dict = {}
