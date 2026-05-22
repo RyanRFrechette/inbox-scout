@@ -407,66 +407,76 @@ class TestOutputFormat(unittest.TestCase):
 # ── natural language routing ──────────────────────────────────────────────────
 
 class TestNaturalLanguageRoute(unittest.TestCase):
+    """Default = both accounts. Explicit primary/secondary = single account."""
 
-    def _route(self, phrase: str):
+    def _route_both(self, phrase: str):
         from inbox_scout import natural_intent as ni
-        with patch("inbox_scout.natural_intent.junk_sender_scout_message",
-                   return_value="JUNK_REPORT") as mock_scout:
+        with patch("inbox_scout.natural_intent.junk_sender_scout_both_message",
+                   return_value="BOTH_REPORT") as mock_both, \
+             patch("inbox_scout.natural_intent.junk_sender_scout_message",
+                   return_value="SINGLE_REPORT") as mock_single:
             result = ni.handle_natural_message(phrase)
-        return result, mock_scout
+        return result, mock_both, mock_single
 
-    def test_find_junk_senders_routes(self):
-        result, mock = self._route("find junk senders")
-        mock.assert_called_once()
-        self.assertEqual(result, "JUNK_REPORT")
+    def test_no_qualifier_runs_both_accounts(self):
+        result, mock_both, mock_single = self._route_both("find junk senders")
+        mock_both.assert_called_once()
+        mock_single.assert_not_called()
+        self.assertEqual(result, "BOTH_REPORT")
 
-    def test_find_newsletter_senders_routes(self):
-        _, mock = self._route("find newsletter senders")
-        mock.assert_called_once()
+    def test_find_newsletter_senders_runs_both(self):
+        _, mock_both, mock_single = self._route_both("find newsletter senders")
+        mock_both.assert_called_once()
+        mock_single.assert_not_called()
 
-    def test_scan_archived_junk_senders_routes(self):
-        _, mock = self._route("scan archived junk senders")
-        mock.assert_called_once()
+    def test_scan_archived_junk_senders_runs_both(self):
+        _, mock_both, mock_single = self._route_both("scan archived junk senders")
+        mock_both.assert_called_once()
+        mock_single.assert_not_called()
 
-    def test_find_senders_to_block_routes(self):
-        _, mock = self._route("find senders to block")
-        mock.assert_called_once()
+    def test_find_senders_to_block_runs_both(self):
+        _, mock_both, mock_single = self._route_both("find senders to block")
+        mock_both.assert_called_once()
+        mock_single.assert_not_called()
 
-    def test_junk_sender_scan_routes(self):
-        _, mock = self._route("junk sender scan")
-        mock.assert_called_once()
+    def test_junk_sender_scan_runs_both(self):
+        _, mock_both, mock_single = self._route_both("junk sender scan")
+        mock_both.assert_called_once()
+        mock_single.assert_not_called()
 
-    def test_primary_is_default(self):
+    def test_both_keyword_also_runs_both(self):
+        _, mock_both, mock_single = self._route_both("find junk senders both accounts")
+        mock_both.assert_called_once()
+        mock_single.assert_not_called()
+
+    def test_explicit_primary_runs_primary_only(self):
         from inbox_scout import natural_intent as ni
         with patch("inbox_scout.natural_intent.junk_sender_scout_message",
-                   return_value="JUNK_REPORT") as mock:
-            ni.handle_natural_message("find junk senders")
-        mock.assert_called_once_with(account="primary")
+                   return_value="SINGLE_REPORT") as mock_single, \
+             patch("inbox_scout.natural_intent.junk_sender_scout_both_message",
+                   return_value="BOTH_REPORT") as mock_both:
+            result = ni.handle_natural_message("find junk senders primary")
+        mock_single.assert_called_once_with(account="primary")
+        mock_both.assert_not_called()
+        self.assertEqual(result, "SINGLE_REPORT")
 
-    def test_secondary_passed(self):
+    def test_explicit_secondary_runs_secondary_only(self):
         from inbox_scout import natural_intent as ni
         with patch("inbox_scout.natural_intent.junk_sender_scout_message",
-                   return_value="JUNK_REPORT") as mock:
-            ni.handle_natural_message("find junk senders secondary")
-        mock.assert_called_once_with(account="secondary")
+                   return_value="SINGLE_REPORT") as mock_single, \
+             patch("inbox_scout.natural_intent.junk_sender_scout_both_message",
+                   return_value="BOTH_REPORT") as mock_both:
+            result = ni.handle_natural_message("find junk senders secondary")
+        mock_single.assert_called_once_with(account="secondary")
+        mock_both.assert_not_called()
+        self.assertEqual(result, "SINGLE_REPORT")
 
-    def test_both_accounts_calls_both(self):
+    def test_scan_archived_both_accounts_runs_both(self):
         from inbox_scout import natural_intent as ni
-        with patch("inbox_scout.natural_intent.junk_sender_scout_message",
-                   return_value="JUNK_REPORT") as mock:
-            result = ni.handle_natural_message("find junk senders both accounts")
-        self.assertEqual(mock.call_count, 2)
-        calls = {c[1]["account"] for c in mock.call_args_list}
-        self.assertEqual(calls, {"primary", "secondary"})
-        self.assertIn("PRIMARY", result)
-        self.assertIn("SECONDARY", result)
-
-    def test_both_scan_archived_routes(self):
-        from inbox_scout import natural_intent as ni
-        with patch("inbox_scout.natural_intent.junk_sender_scout_message",
-                   return_value="JUNK_REPORT") as mock:
-            result = ni.handle_natural_message("scan archived junk senders both accounts")
-        self.assertEqual(mock.call_count, 2)
+        with patch("inbox_scout.natural_intent.junk_sender_scout_both_message",
+                   return_value="BOTH_REPORT") as mock_both:
+            ni.handle_natural_message("scan archived junk senders both accounts")
+        mock_both.assert_called_once()
 
 
 # ── classify helper unit tests ────────────────────────────────────────────────
@@ -559,6 +569,155 @@ class TestClassifyUnit(unittest.TestCase):
         from inbox_scout.junk_sender_scout import _compute_risk
         risk = _compute_risk("newsletter", "brand.com", ["Monthly digest"] * 5)
         self.assertLessEqual(risk, 30)
+
+
+# ── pagination and emergency cap ─────────────────────────────────────────────
+
+class TestPagination(unittest.TestCase):
+    """scan_junk_senders must paginate via nextPageToken and respect emergency cap."""
+
+    def _paginated_service(self, pages: list[list[dict]], next_tokens: list[str | None]):
+        """
+        Build a mock that returns multiple pages.
+        pages[i] = message stubs for page i
+        next_tokens[i] = nextPageToken returned by page i (None = last page)
+        """
+        service = MagicMock()
+        call_count = {"n": 0}
+
+        def _list_execute():
+            i = call_count["n"]
+            call_count["n"] += 1
+            result: dict = {"messages": pages[i]}
+            if next_tokens[i] is not None:
+                result["nextPageToken"] = next_tokens[i]
+            return result
+
+        list_mock = service.users.return_value.messages.return_value.list.return_value
+        list_mock.execute.side_effect = _list_execute
+
+        def _get(**kwargs):
+            mid = kwargs.get("id", "")
+            result_mock = MagicMock()
+            result_mock.execute.return_value = {
+                "payload": {"headers": [
+                    {"name": "From", "value": f"sender{mid}@promo.example"},
+                    {"name": "Subject", "value": "50% off today"},
+                ]}
+            }
+            return result_mock
+
+        service.users.return_value.messages.return_value.get.side_effect = _get
+        return service
+
+    def test_follows_next_page_token(self):
+        from inbox_scout.junk_sender_scout import scan_junk_senders
+        page1 = [{"id": "m1"}, {"id": "m2"}]
+        page2 = [{"id": "m3"}]
+        service = self._paginated_service(
+            pages=[page1, page2],
+            next_tokens=["token_pg2", None],
+        )
+        with patch("inbox_scout.junk_sender_scout.get_gmail_service", return_value=service):
+            result = scan_junk_senders()
+        # Both pages fetched → 3 messages scanned
+        self.assertEqual(result["messages_scanned"], 3)
+        # list() called twice (once per page)
+        self.assertEqual(
+            service.users.return_value.messages.return_value.list.call_count, 2
+        )
+
+    def test_second_page_uses_page_token(self):
+        from inbox_scout.junk_sender_scout import scan_junk_senders
+        page1 = [{"id": "m1"}]
+        page2 = [{"id": "m2"}]
+        service = self._paginated_service(
+            pages=[page1, page2],
+            next_tokens=["mytoken123", None],
+        )
+        with patch("inbox_scout.junk_sender_scout.get_gmail_service", return_value=service):
+            scan_junk_senders()
+        list_calls = service.users.return_value.messages.return_value.list.call_args_list
+        second_call_kwargs = list_calls[1][1]
+        self.assertEqual(second_call_kwargs.get("pageToken"), "mytoken123")
+
+    def test_stops_when_no_next_page_token(self):
+        from inbox_scout.junk_sender_scout import scan_junk_senders
+        service = self._paginated_service(
+            pages=[[{"id": "m1"}]],
+            next_tokens=[None],  # no more pages
+        )
+        with patch("inbox_scout.junk_sender_scout.get_gmail_service", return_value=service):
+            result = scan_junk_senders()
+        self.assertEqual(result["messages_scanned"], 1)
+        self.assertEqual(
+            service.users.return_value.messages.return_value.list.call_count, 1
+        )
+
+    def test_emergency_cap_stops_pagination(self):
+        from inbox_scout.junk_sender_scout import scan_junk_senders
+        # Two pages of 3 messages each; cap=4 → stops after collecting 4
+        page1 = [{"id": f"m{i}"} for i in range(3)]
+        page2 = [{"id": f"m{i}"} for i in range(3, 6)]
+        service = self._paginated_service(
+            pages=[page1, page2],
+            next_tokens=["tok", None],
+        )
+        with patch("inbox_scout.junk_sender_scout.get_gmail_service", return_value=service):
+            result = scan_junk_senders(emergency_cap=4)
+        self.assertEqual(result["messages_scanned"], 4)
+        self.assertTrue(result["cap_hit"])
+
+    def test_no_cap_when_under_limit(self):
+        from inbox_scout.junk_sender_scout import scan_junk_senders
+        service = self._paginated_service(
+            pages=[[{"id": "m1"}, {"id": "m2"}]],
+            next_tokens=[None],
+        )
+        with patch("inbox_scout.junk_sender_scout.get_gmail_service", return_value=service):
+            result = scan_junk_senders(emergency_cap=100)
+        self.assertFalse(result["cap_hit"])
+
+    def test_cap_reported_honestly_in_output(self):
+        from inbox_scout.junk_sender_scout import junk_sender_scout_message
+        page1 = [{"id": f"m{i}"} for i in range(3)]
+        page2 = [{"id": f"m{i}"} for i in range(3, 6)]
+        service = self._paginated_service(
+            pages=[page1, page2],
+            next_tokens=["tok", None],
+        )
+        with patch("inbox_scout.junk_sender_scout.get_gmail_service", return_value=service), \
+             patch("inbox_scout.junk_sender_scout.EMERGENCY_CAP", 4), \
+             patch("inbox_scout.junk_sender_scout.scan_junk_senders",
+                   return_value={
+                       "messages_scanned": 4, "profiles_total": 2,
+                       "candidates": [], "archive_only": [], "excluded": [],
+                       "cap_hit": True,
+                   }):
+            output = junk_sender_scout_message()
+        self.assertIn("cap", output.lower())
+
+    def test_result_has_cap_hit_key(self):
+        from inbox_scout.junk_sender_scout import scan_junk_senders
+        service = _make_service([], {})
+        with patch("inbox_scout.junk_sender_scout.get_gmail_service", return_value=service):
+            result = scan_junk_senders()
+        self.assertIn("cap_hit", result)
+        self.assertFalse(result["cap_hit"])
+
+    def test_no_gmail_writes_during_pagination(self):
+        from inbox_scout.junk_sender_scout import scan_junk_senders
+        page1 = [{"id": "m1"}, {"id": "m2"}]
+        page2 = [{"id": "m3"}]
+        service = self._paginated_service(
+            pages=[page1, page2],
+            next_tokens=["tok", None],
+        )
+        with patch("inbox_scout.junk_sender_scout.get_gmail_service", return_value=service):
+            scan_junk_senders()
+        service.users.return_value.messages.return_value.modify.assert_not_called()
+        service.users.return_value.messages.return_value.trash.assert_not_called()
+        service.users.return_value.settings.assert_not_called()
 
 
 if __name__ == "__main__":

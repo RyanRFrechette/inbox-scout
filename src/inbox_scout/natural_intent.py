@@ -23,7 +23,7 @@ from inbox_scout.inbox_cleanup_runner import build_inbox_cleanup_runner_message
 from inbox_scout.cleanup_control import build_cleanup_status_message, build_cancel_cleanup_message
 from inbox_scout.trash_sender_block_plan import build_sender_block_plan_message
 from inbox_scout.trash_sender_block_runner import build_sender_block_runner_message
-from inbox_scout.junk_sender_scout import junk_sender_scout_message
+from inbox_scout.junk_sender_scout import junk_sender_scout_message, junk_sender_scout_both_message
 from inbox_scout.model_router import get_provider, set_provider, model_status_message, get_active_provider, OLLAMA_MODEL, OPENROUTER_MODEL
 from inbox_scout.mark_read_runner import build_mark_read_plan_message, build_mark_read_runner_message
 from inbox_scout.queue_decision import build_set_decision_message
@@ -927,12 +927,11 @@ def handle_natural_message(text: str) -> str:
         "find senders to block",
         "find newsletter senders to block",
     ]):
-        if "both" in msg:
-            _pri = junk_sender_scout_message(account="primary")
-            _sec = junk_sender_scout_message(account="secondary")
-            return f"PRIMARY ACCOUNT:\n{_pri}\n\nSECONDARY ACCOUNT:\n{_sec}"
-        _junk_account = "secondary" if "secondary" in msg else "primary"
-        return junk_sender_scout_message(account=_junk_account)
+        if "secondary" in msg and "primary" not in msg:
+            return junk_sender_scout_message(account="secondary")
+        if "primary" in msg and "secondary" not in msg:
+            return junk_sender_scout_message(account="primary")
+        return junk_sender_scout_both_message()
 
     if any(phrase in msg for phrase in [
         "mark reviewed as read",

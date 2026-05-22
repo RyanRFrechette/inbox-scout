@@ -14,7 +14,8 @@ SAFE = "safe_to_review_for_blocking"
 ARCHIVE_ONLY = "archive_only_do_not_block"
 EXCLUDED = "excluded_protected"
 
-MAX_MESSAGES = 100
+EMERGENCY_CAP = 5000   # hard stop; full paginated scan by default
+_PAGE_SIZE = 500        # Gmail API max per page
 SAMPLE_SIZE = 5
 _QUERY = "(category:promotions OR category:updates) -in:trash -in:spam"
 
@@ -231,14 +232,30 @@ def _classify(addr: str, display_name: str, subjects: list[str]) -> tuple[str, i
 
 # ── public API ────────────────────────────────────────────────────────────────
 
-def scan_junk_senders(account: str = "primary", max_results: int = MAX_MESSAGES) -> dict:
-    """Read-only Gmail scan. Returns profile dict. No Gmail writes."""
+def scan_junk_senders(account: str = "primary", emergency_cap: int = EMERGENCY_CAP) -> dict:
+    """Full paginated read-only Gmail scan. No Gmail writes."""
     service = get_gmail_service(mode="readonly", account=account)
 
-    response = service.users().messages().list(
-        userId="me", q=_QUERY, maxResults=max_results,
-    ).execute()
-    msgs = response.get("messages", [])
+    msgs: list[dict] = []
+    page_token: str | None = None
+    cap_hit = False
+
+    while True:
+        kwargs: dict = {"userId": "me", "q": _QUERY, "maxResults": _PAGE_SIZE}
+        if page_token:
+            kwargs["pageToken"] = page_token
+        response = service.users().messages().list(**kwargs).execute()
+        page = response.get("messages", [])
+        if not page:
+            break
+        msgs.extend(page)
+        if len(msgs) >= emergency_cap:
+            msgs = msgs[:emergency_cap]
+            cap_hit = True
+            break
+        page_token = response.get("nextPageToken")
+        if not page_token:
+            break
 
     sender_data: dict[str, dict] = {}
     for stub in msgs:
@@ -291,33 +308,34 @@ def scan_junk_senders(account: str = "primary", max_results: int = MAX_MESSAGES)
         "candidates": candidates,
         "archive_only": archive_only,
         "excluded": excluded,
+        "cap_hit": cap_hit,
     }
 
 
-def junk_sender_scout_message(account: str = "primary") -> str:
-    """Entry point for natural_intent routing. Always read-only."""
-    try:
-        result = scan_junk_senders(account=account)
-    except Exception as exc:
-        return f"Junk Sender Scout failed: {exc}\n\nNo Gmail changes made."
-
+def _format_account_result(result: dict, account: str) -> str:
+    """Format one account's scan result. No Gmail-changes footer — caller adds it."""
     candidates = result["candidates"]
     archive_only = result["archive_only"]
     excluded = result["excluded"]
 
     lines = [
-        f"Junk Sender Scout — {account} account",
-        "Scope: All Mail (promotions + updates), archived-capable",
+        f"Scope: All Mail (promotions + updates), archived-capable",
         f"Scanned: {result['messages_scanned']} messages, "
         f"{result['profiles_total']} sender profile(s)",
-        "",
     ]
+
+    if result.get("cap_hit"):
+        lines.append(
+            f"** Emergency cap hit at {EMERGENCY_CAP} messages "
+            "— results are partial, not a full scan. **"
+        )
+
+    lines.append("")
 
     if not candidates:
         lines += [
             "No block-review candidates found.",
             "All senders were protected, archive-only, or low-evidence.",
-            "",
         ]
     else:
         lines.append(f"Block-review candidates ({len(candidates)}):")
@@ -332,17 +350,50 @@ def junk_sender_scout_message(account: str = "primary") -> str:
             lines.append(f"   {c['reason']}")
             lines.append("")
         if len(candidates) > 10:
-            lines.append(f"... and {len(candidates) - 10} more.")
+            lines.append(f"... and {len(candidates) - 10} more candidates.")
             lines.append("")
+
+    if archive_only:
+        lines.append(f"Archive-only examples ({len(archive_only)} total — useful, don't block):")
+        for c in archive_only[:10]:
+            dn = f" ({c['display_name']})" if c["display_name"] else ""
+            lines.append(f"  - {c['sender']}{dn} ({c['count']} emails) — {c['reason']}")
+        if len(archive_only) > 10:
+            lines.append(f"  ... and {len(archive_only) - 10} more.")
+        lines.append("")
 
     parts = []
     if excluded:
         parts.append(f"{len(excluded)} excluded (protected/sensitive)")
-    if archive_only:
-        parts.append(f"{len(archive_only)} archive-only (useful, don't block)")
     if parts:
         lines.append("Filtered out: " + ", ".join(parts))
-        lines.append("")
 
-    lines.append("No Gmail changes made.")
     return "\n".join(lines)
+
+
+def junk_sender_scout_message(account: str = "primary") -> str:
+    """Single-account entry point. Always read-only."""
+    try:
+        result = scan_junk_senders(account=account)
+    except Exception as exc:
+        return f"Junk Sender Scout failed: {exc}\n\nNo Gmail changes made."
+
+    header = f"Junk Sender Scout — {account} account\n"
+    return header + _format_account_result(result, account) + "\n\nNo Gmail changes made."
+
+
+def junk_sender_scout_both_message() -> str:
+    """Scan primary + secondary and combine output. Always read-only."""
+    sections = ["Junk Sender Scout — both accounts", ""]
+
+    for acct in ("primary", "secondary"):
+        sections.append(f"{'=' * 4} {acct.upper()} {'=' * 4}")
+        try:
+            result = scan_junk_senders(account=acct)
+            sections.append(_format_account_result(result, acct))
+        except Exception as exc:
+            sections.append(f"Error scanning {acct}: {exc}")
+        sections.append("")
+
+    sections.append("No Gmail changes made.")
+    return "\n".join(sections)
