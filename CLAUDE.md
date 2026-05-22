@@ -40,7 +40,7 @@ The Telegram bot ("Atlas") allows Ryan to run inbox operations from his phone wi
 - New: cloud_startup.py — decodes GMAIL_TOKEN_JSON and GMAIL_TOKEN_MODIFY_JSON from base64 at startup; validates JSON; never overwrites existing files; never logs values
 - Fixed: kill_stale_watchers() no-ops on non-Windows (port lock handles dedup on Linux)
 - Fixed: refuse_global_python() skips check on non-Windows and when no .venv (cloud)
-- Updated: render.yaml, .env.example, README with full cloud deployment guide
+- Updated: render.yaml (deploy config reference), .env.example, README with full cloud deployment guide
 - Key commits: 53d2365 (cloud startup + Linux-safe watcher), d48ebb7 (docs), 6d69651 (review fixes)
 
 **Phase MVP Routing — 2026-05-21:**
@@ -126,7 +126,7 @@ The Telegram bot ("Atlas") allows Ryan to run inbox operations from his phone wi
 **Current safety mode:** Autopilot routes to primary account by default. Gmail Trash only — no permanent delete. Protected/manual-review always skipped.
 
 **Next planned steps (in order):**
-1. Push to origin/master and deploy to Render (render.yaml is ready; encode tokens and set secrets)
+1. Push to origin/master and deploy to DigitalOcean (encode tokens as base64 env vars, set TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, ENABLE_TELEGRAM_WATCHER=true in DO dashboard)
 2. Verify deployed worker responds to "status" and "progress report" from Telegram
 3. Phase 14 — Permanent delete mode (nuclear, disabled until explicitly enabled)
 

@@ -8,9 +8,9 @@ services:
       - key: PYTHONPATH
         value: src
       - key: TELEGRAM_BOT_TOKEN
-        sync: false       # set in Render dashboard — never commit
+        sync: false       # set in cloud dashboard (DigitalOcean) — never commit
       - key: TELEGRAM_CHAT_ID
-        sync: false       # set in Render dashboard — never commit
+        sync: false       # set in cloud dashboard (DigitalOcean) — never commit
       - key: GMAIL_TOKEN_JSON
         sync: false       # base64-encoded token.json — decoded at startup by cloud_startup.py
       - key: GMAIL_TOKEN_MODIFY_JSON
@@ -21,15 +21,16 @@ services:
         sync: false       # must be explicitly set to "true" to start the cloud watcher
     disk:
       name: inbox-scout-data
-      mountPath: /opt/render/project/src/data
+      mountPath: /opt/inbox-scout/data
       sizeGB: 1
 
 # Watcher mode — local vs. cloud:
 #   The local Windows watcher (started via Start-InboxScoutTelegramWatcher) is the primary
-#   Atlas interface. The cloud watcher on Render is disabled by default: telegram_watch.py
-#   exits immediately on Linux unless ENABLE_TELEGRAM_WATCHER=true is set.
-#   Only set ENABLE_TELEGRAM_WATCHER=true on Render if intentionally switching Atlas to
-#   hosted mode. Running both simultaneously causes duplicate Telegram replies (409 conflict).
+#   Atlas interface. The cloud watcher (DigitalOcean or any Linux host) is disabled by default:
+#   telegram_watch.py exits immediately on Linux unless ENABLE_TELEGRAM_WATCHER=true is set.
+#   On DigitalOcean, keep ENABLE_TELEGRAM_WATCHER unset while using the local Windows watcher.
+#   Set it to "true" only if intentionally switching Atlas to hosted mode.
+#   Running both simultaneously causes duplicate Telegram replies (409 conflict).
 #
 # Deployment notes:
 #
@@ -43,7 +44,7 @@ services:
 #     Linux:      base64 -w 0 token.json
 #
 # AI classification:
-#   Ollama is unavailable on Render. With OPENROUTER_API_KEY set, classification
+#   Ollama is unavailable on cloud/Linux hosts. With OPENROUTER_API_KEY set, classification
 #   uses OpenRouter (google/gemini-2.5-flash-lite or similar). Without it,
 #   rule-based classification runs only. No Gmail safety behavior changes.
 #
@@ -53,4 +54,4 @@ services:
 #
 # Data persistence:
 #   Queue, log, and report files are written to data/ under the project root.
-#   The 1GB disk mount keeps them across deploys on Render.
+#   The 1GB disk mount keeps them across deploys.

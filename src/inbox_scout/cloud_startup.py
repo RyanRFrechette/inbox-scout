@@ -1,6 +1,6 @@
 """Cloud startup helpers: decode Gmail OAuth tokens from environment variables.
 
-On cloud deployments (Render/Railway/Fly/VPS), Gmail token files are not on disk.
+On cloud deployments (DigitalOcean/VPS/any Linux host), Gmail token files are not on disk.
 This module decodes base64-encoded token JSON from env vars and writes them to
 the expected paths — only if the target file does not already exist.
 

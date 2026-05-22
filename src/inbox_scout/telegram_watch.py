@@ -147,7 +147,7 @@ def main() -> None:
     log(f"Env loaded. {env_status()}")
 
     # On Linux/cloud, require explicit opt-in to avoid competing with a local watcher.
-    # On Windows, always allowed. On Render, set ENABLE_TELEGRAM_WATCHER=true in the dashboard.
+    # On Windows, always allowed. On DigitalOcean (or any cloud host), set ENABLE_TELEGRAM_WATCHER=true.
     if sys.platform != "win32" and os.environ.get("ENABLE_TELEGRAM_WATCHER", "").lower() != "true":
         msg = "Cloud Telegram watcher disabled. Set ENABLE_TELEGRAM_WATCHER=true to enable Atlas on this host."
         print(msg)

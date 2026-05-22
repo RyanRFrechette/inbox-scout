@@ -63,7 +63,7 @@ Implemented areas:
 - InboxScout Gmail labels
 - Classification audit explanations
 - Resort Everything: full corpus scan with label-only correction mode
-- Cloud deployment config (render.yaml)
+- Cloud deployment config (render.yaml reference, DigitalOcean-compatible)
 
 Current active direction:
 
@@ -404,7 +404,7 @@ Credential files and local `.env` are intentionally ignored by git.
 
 ---
 
-## Cloud deployment (Render / Railway / Fly / VPS)
+## Cloud deployment (DigitalOcean / VPS / Linux)
 
 ### 1. Encode Gmail tokens
 
@@ -424,7 +424,7 @@ base64 -w 0 token_modify.json
 
 ### 2. Set environment secrets
 
-In your cloud dashboard (Render / Railway / Fly), set these as secrets (never commit values):
+In your cloud dashboard (DigitalOcean App Platform / VPS env), set these as secrets (never commit values):
 
 ```
 TELEGRAM_BOT_TOKEN=<your Atlas bot token>
@@ -433,7 +433,10 @@ GMAIL_TOKEN_JSON=<base64 output from step 1>
 GMAIL_TOKEN_MODIFY_JSON=<base64 output from step 1>
 OPENROUTER_API_KEY=<optional>
 PYTHONPATH=src
+ENABLE_TELEGRAM_WATCHER=true
 ```
+
+Note: `ENABLE_TELEGRAM_WATCHER=true` is required on Linux/cloud — the watcher exits immediately without it to prevent conflicts with a local Windows watcher. Keep it unset if running Atlas locally.
 
 ### 3. Start command
 
@@ -442,7 +445,7 @@ python -m inbox_scout.telegram_watch
 ```
 
 The worker auto-decodes token env vars to disk on startup (only if the files are missing).
-On Render, use the included `render.yaml` — it configures the worker, disk mount, and env vars.
+`render.yaml` is included as a deploy config reference; adapt env var names for DigitalOcean App Platform or your VPS setup.
 
 ### 4. Verify deployment
 
@@ -478,7 +481,7 @@ Completed milestones:
 - Inbox Zero batch autopilot (`clean 25 emails`, `clean up a batch`, `sort all`)
 - OpenRouter AI classifier integration with local fallback
 - Resort Everything: full corpus label correction mode
-- Cloud deployment config (render.yaml, cloud_startup.py, Linux-safe watcher)
+- Cloud deployment config (cloud_startup.py, Linux-safe watcher, DigitalOcean-compatible)
 
 ---
 
