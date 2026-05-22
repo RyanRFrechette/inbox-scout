@@ -68,7 +68,7 @@ def _cleanup_eta_msg() -> str:
     except Exception:
         unread = -1
     if unread < 0:
-        return "Starting inbox cleanup. This may take a few minutes.\n\nRead-only until you see the summary."
+        return "Starting inbox cleanup. This may take a few minutes."
     batches = max(1, math.ceil(unread / AUTOPILOT_MAX_LIMIT))
     eta_mins = max(1, batches)
     unread_word = "email" if unread == 1 else "emails"
@@ -86,7 +86,8 @@ def _cleanup_thread(cmd_text: str) -> None:
         _log_error(f"cleanup thread error for {cmd_text!r}:\n{traceback.format_exc()}")
         reply = (
             f"Cleanup stopped unexpectedly. {type(exc).__name__}: {exc}\n\n"
-            "No further action was taken. Gmail not touched."
+            "Earlier safe actions in this session may have already completed before the error. "
+            "Run 'cleanup status' to see what was done."
         )
     try:
         send_message(reply)
@@ -326,8 +327,8 @@ def run_once() -> None:
             eta_msg = _cleanup_eta_msg()
             try:
                 send_message(eta_msg)
-            except Exception:
-                pass
+            except Exception as _eta_exc:
+                _log_error(f"cleanup ETA send failed: {_eta_exc}")
             threading.Thread(target=_cleanup_thread, args=(text,), daemon=True).start()
         elif is_resort_run or is_resort_preview:
             if is_resort_run:

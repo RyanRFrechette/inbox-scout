@@ -94,8 +94,9 @@ class TestCleanupEtaMsg(unittest.TestCase):
         import inbox_scout.telegram_listener as tl
         with patch.object(tl, "_get_modify_service_for_autopilot", side_effect=Exception("auth fail")):
             msg = tl._cleanup_eta_msg()
-        self.assertIn("few minutes", msg)
+        self.assertIn("Starting inbox cleanup", msg)
         self.assertNotIn("There are", msg)
+        self.assertNotIn("Read-only", msg)
 
 
 class TestCleanupThread(unittest.TestCase):
@@ -116,8 +117,8 @@ class TestCleanupThread(unittest.TestCase):
              patch.object(tl, "_log_error"):
             tl._cleanup_thread("cleanup")
         self.assertEqual(len(sent), 1)
-        self.assertIn("Gmail not touched", sent[0])
-        self.assertIn("No further action", sent[0])
+        self.assertIn("Cleanup stopped unexpectedly", sent[0])
+        self.assertIn("cleanup status", sent[0].lower())
 
     def test_exception_message_does_not_include_trash_or_archive(self):
         import inbox_scout.telegram_listener as tl
