@@ -927,6 +927,10 @@ def handle_natural_message(text: str) -> str:
         "find senders to block",
         "find newsletter senders to block",
     ]):
+        if "both" in msg:
+            _pri = junk_sender_scout_message(account="primary")
+            _sec = junk_sender_scout_message(account="secondary")
+            return f"PRIMARY ACCOUNT:\n{_pri}\n\nSECONDARY ACCOUNT:\n{_sec}"
         _junk_account = "secondary" if "secondary" in msg else "primary"
         return junk_sender_scout_message(account=_junk_account)
 

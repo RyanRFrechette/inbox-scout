@@ -1,9 +1,6 @@
 """
-Junk Sender Scout — read-only Gmail scan for newsletter/promo sender candidates.
-
-Phase 1: Report only. No Gmail writes, no filter creation, no labels.
-Scans All Mail (promotions + updates categories) to surface senders
-worth reviewing for future blocking.
+Junk Sender Scout — read-only Gmail scan for newsletter/promo block candidates.
+Phase 1: Report only. No Gmail writes.
 """
 from __future__ import annotations
 
@@ -11,41 +8,133 @@ import re
 from collections import defaultdict
 
 from inbox_scout.gmail_auth import get_gmail_service
-from inbox_scout.trash_execution_runner import PROTECTED_TEXT_TERMS
-from inbox_scout.trash_sender_block_plan import extract_email, is_system_sender, is_valid_email
+from inbox_scout.trash_sender_block_plan import extract_email, is_valid_email
+
+SAFE = "safe_to_review_for_blocking"
+ARCHIVE_ONLY = "archive_only_do_not_block"
+EXCLUDED = "excluded_protected"
 
 MAX_MESSAGES = 100
-SAMPLE_SIZE = 3
+SAMPLE_SIZE = 5
+_QUERY = "(category:promotions OR category:updates) -in:trash -in:spam"
 
-_JUNK_SUBJECT_PATTERNS = [
-    r"\bunsubscribe\b",
-    r"\b\d+\s*%\s*off\b",
-    r"\bsale\b",
-    r"\bdeal\b",
-    r"\bcoupon\b",
-    r"\bdiscount\b",
-    r"\blimited\s+time\b",
-    r"\bshop\s+now\b",
-    r"\bpromo(?:tion)?\b",
-    r"\bnewsletter\b",
-    r"\bdigest\b",
-    r"\bweekly\b",
-    r"\bmonthly\b",
-]
-_JUNK_RE = [re.compile(p, re.IGNORECASE) for p in _JUNK_SUBJECT_PATTERNS]
+# ── positive signals ──────────────────────────────────────────────────────────
+_PROMO_TERMS = frozenset({
+    "sale", "deals", "deal", "discount", "coupon", "promo", "promotion",
+    "save", "savings", "clearance", "limited time", "last chance",
+    "ends tonight", "ends soon", "final hours", "exclusive offer",
+    "special offer", "shop now", "new arrivals", "trending",
+    "recommended for you", "picked for you", "because you viewed",
+    "price drop", "rewards", "points", "sweepstakes", "giveaway",
+    "free shipping", "flash sale", "unlock", "today only",
+    "newsletter", "digest", "weekly update", "daily update", "monthly update",
+    "roundup", "from the blog", "tips", "recommendations",
+})
 
-# Sender domain substrings that should never be flagged for blocking
-_PROTECTED_SENDER_KEYWORDS = {
-    "bank", "credit", "capital", "fidelity", "schwab", "vanguard",
-    "paypal", "stripe", "tax", "irs", ".gov", "hospital", "clinic",
-    "health", "medical", "insurance", "legal", "attorney", "law",
-    "pharmacy", "doctor", "dentist", "visa", "mastercard",
-    "amex", "wellsfargo", "chase", "citibank", "usbank",
-}
+_BULK_CONTENT_TERMS = frozenset({
+    "unsubscribe", "manage preferences", "email preferences",
+    "view in browser", "view this email", "mailing list",
+    "you are receiving this", "update your preferences",
+})
+
+_BULK_LOCAL_PARTS = frozenset({
+    "newsletter", "marketing", "promo", "promos", "deals", "offers",
+    "offer", "mailer", "campaign", "campaigns", "news", "notification",
+})
+
+_BULK_SUBDOMAINS = frozenset({
+    "email", "mail", "news", "em", "send", "promo", "marketing",
+    "newsletter", "deals", "offers", "notify", "e",
+})
+
+# ── hard exclusions → excluded_protected ─────────────────────────────────────
+_SECURITY_TERMS = frozenset({
+    "login", "log in", "sign in", "signin", "password", "passcode",
+    "2fa", "mfa", "verification code", "security alert", "suspicious activity",
+    "account locked", "account recovery", "reset your password",
+    "compromised", "breach", "new device", "authentication",
+    "verify your", "confirm your identity", "ssh key", "ssh access",
+})
+
+_MEDICAL_TERMS = frozenset({
+    "doctor", "appointment", "mri", "endocrinology", "neurosurgery",
+    "dermatology", "prescription", "patient portal", "lab results",
+    "test results", "neurosurgeon", "endocrinologist",
+    "mgh", "mass general", "st. joe", "st. joseph",
+})
+
+_JOBS_TERMS = frozenset({
+    "recruiter", "recruiting", "job offer", "hiring manager",
+    "your application", "open position", "job opportunity", "career opportunity",
+    "interview invitation", "interview request",
+})
+
+_CLOUD_DEV_TERMS = frozenset({
+    "ssh ", "droplet", "ssl certificate", "api key", "security vulnerability",
+    "server outage", "incident report", "infrastructure alert",
+    "deployment failed", "build failed",
+})
+
+_FINANCE_TERMS = frozenset({
+    "payment", "autopay", "account balance", "credit card statement",
+    "loan statement", "mortgage statement", "payroll", "paycheck",
+    "direct deposit", "overdraft", "insurance claim", "policy number",
+})
+
+_FINANCE_DOMAIN_SUBSTRINGS = frozenset({
+    "paypal", "venmo", "chime", "stripe", "plaid", "onepay",
+    "cashapp", "cash-app", "wellsfargo", "citibank", "usbank", "amex",
+    "fidelity", "schwab", "vanguard",
+})
+
+_JOBS_DOMAIN_SUBSTRINGS = frozenset({
+    "linkedin", "indeed", "ziprecruiter", "glassdoor", "workday",
+    "greenhouse", "lever", "welo", "welocalize", "jobvite",
+})
+
+_MEDICAL_DOMAIN_SUBSTRINGS = frozenset({
+    "hospital", "clinic", "health", "medical", "pharmacy", "patient",
+})
+
+_LEGAL_DOMAIN_SUBSTRINGS = frozenset({
+    "court", "legal", "attorney", "lawyer", "dmv",
+})
+
+_CLOUD_DEV_BASE_DOMAINS = frozenset({
+    "digitalocean.com", "openai.com", "anthropic.com",
+    "cloudflare.com", "github.com",
+})
+
+_PERSONAL_DOMAINS = frozenset({
+    "gmail.com", "yahoo.com", "icloud.com", "hotmail.com",
+    "outlook.com", "me.com", "aol.com",
+})
+
+# ── archive-only (useful, don't block) ───────────────────────────────────────
+_ORDERS_TERMS = frozenset({
+    "your order", "order confirmation", "order shipped", "order delivered",
+    "shipping confirmation", "tracking number", "return request",
+    "your receipt", "purchase confirmation", "google play",
+    "has been shipped", "out for delivery",
+})
+
+_ARCHIVE_ONLY_DOMAIN_SUBSTRINGS = frozenset({
+    "usps", "ups", "fedex", "dhl", "shopify", "informeddelivery",
+})
+
+_ARCHIVE_ONLY_BASE_DOMAINS = frozenset({
+    "amazon.com", "etsy.com", "walmart.com", "ebay.com", "google.com",
+})
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+def _extract_display_name(raw_from: str) -> str:
+    m = re.match(r'^"?([^"<]{2,60}?)"?\s*<', raw_from.strip())
+    return m.group(1).strip().strip('"') if m else ""
 
 
 def _get_headers(service, msg_id: str) -> dict[str, str]:
-    """Fetch only From and Subject headers for a message."""
     result = service.users().messages().get(
         userId="me",
         id=msg_id,
@@ -58,49 +147,101 @@ def _get_headers(service, msg_id: str) -> dict[str, str]:
     return out
 
 
-def _is_protected(addr: str, subjects: list[str]) -> bool:
-    """Return True if this sender should never be flagged."""
+def _domain_matches_base(domain: str, base: str) -> bool:
+    return domain == base or domain.endswith("." + base)
+
+
+def _compute_risk(local: str, domain: str, subjects: list[str]) -> int:
+    count = len(subjects)
+    combined = " ".join(subjects).lower()
+    base = 50
+    if count >= 3:
+        base -= 10
+    if count >= 5:
+        base -= 10
+    if count >= 10:
+        base -= 15
+    if count == 1:
+        base += 10
+    promo_hits = sum(1 for s in subjects if any(t in s.lower() for t in _PROMO_TERMS))
+    if promo_hits >= 2:
+        base -= 10
+    if local in _BULK_LOCAL_PARTS or any(p in local for p in _BULK_LOCAL_PARTS if len(p) >= 5):
+        base -= 10
+    subdomain = domain.split(".")[0] if domain.count(".") >= 2 else ""
+    if subdomain in _BULK_SUBDOMAINS:
+        base -= 10
+    if any(t in combined for t in _BULK_CONTENT_TERMS):
+        base -= 10
+    return max(0, min(100, base))
+
+
+def _classify(addr: str, display_name: str, subjects: list[str]) -> tuple[str, int, str]:
+    """Return (recommendation_class, risk_score, reason). Pure logic, no I/O."""
     domain = addr.split("@")[-1].lower() if "@" in addr else addr.lower()
-    for kw in _PROTECTED_SENDER_KEYWORDS:
-        if kw in domain:
-            return True
+    local = addr.split("@")[0].lower() if "@" in addr else ""
     combined = " ".join(subjects).lower()
-    for term in PROTECTED_TEXT_TERMS:
-        if term in combined:
-            return True
-    return False
+
+    if domain in _PERSONAL_DOMAINS:
+        return EXCLUDED, 90, "personal email domain"
+
+    for t in _SECURITY_TERMS:
+        if t in combined:
+            return EXCLUDED, 90, f"security: {t}"
+    for t in _MEDICAL_TERMS:
+        if t in combined:
+            return EXCLUDED, 90, f"medical: {t}"
+    for t in _JOBS_TERMS:
+        if t in combined:
+            return EXCLUDED, 85, f"jobs: {t}"
+    for t in _CLOUD_DEV_TERMS:
+        if t in combined:
+            return EXCLUDED, 85, f"cloud/dev: {t}"
+    for t in _FINANCE_TERMS:
+        if t in combined:
+            return EXCLUDED, 90, f"finance: {t}"
+
+    for t in _ORDERS_TERMS:
+        if t in combined:
+            return ARCHIVE_ONLY, 70, f"order/receipt: {t}"
+
+    if "bank" in domain:
+        return EXCLUDED, 90, "banking domain"
+    if any(k in domain for k in _FINANCE_DOMAIN_SUBSTRINGS):
+        return EXCLUDED, 90, "finance domain"
+    if any(_domain_matches_base(domain, b) for b in _CLOUD_DEV_BASE_DOMAINS):
+        return EXCLUDED, 85, "cloud/dev domain"
+    if any(k in domain for k in _JOBS_DOMAIN_SUBSTRINGS):
+        return EXCLUDED, 85, "jobs/recruiting domain"
+    if any(k in domain for k in _MEDICAL_DOMAIN_SUBSTRINGS):
+        return EXCLUDED, 85, "medical domain"
+    if any(k in domain for k in _LEGAL_DOMAIN_SUBSTRINGS) or ".gov" in domain:
+        return EXCLUDED, 85, "legal/government domain"
+
+    if any(k in domain for k in _ARCHIVE_ONLY_DOMAIN_SUBSTRINGS):
+        return ARCHIVE_ONLY, 70, "shipping/USPS domain"
+    if any(_domain_matches_base(domain, b) for b in _ARCHIVE_ONLY_BASE_DOMAINS):
+        return ARCHIVE_ONLY, 70, "major service domain (archive-only)"
+
+    risk = _compute_risk(local, domain, subjects)
+    if risk <= 30:
+        return SAFE, risk, "high-confidence newsletter/promo sender"
+    return ARCHIVE_ONLY, risk, "insufficient evidence for safe blocking recommendation"
 
 
-def _count_junk_signals(subjects: list[str]) -> tuple[int, list[str]]:
-    combined = " ".join(subjects).lower()
-    matched = [p.pattern for p in _JUNK_RE if p.search(combined)]
-    return len(matched), matched
+# ── public API ────────────────────────────────────────────────────────────────
 
-
-def _risk_score(count: int, signal_count: int) -> int:
-    """Lower score = more confident it is safe to review for blocking."""
-    base = 40
-    base -= min(signal_count * 5, 20)
-    base -= min((count - 1) // 3, 5) * 2
-    return max(5, base)
-
-
-def scan_junk_senders(account: str = "primary", max_results: int = MAX_MESSAGES) -> list[dict]:
-    """
-    Read-only Gmail scan. Returns list of candidate dicts.
-    No Gmail writes are performed.
-    """
+def scan_junk_senders(account: str = "primary", max_results: int = MAX_MESSAGES) -> dict:
+    """Read-only Gmail scan. Returns profile dict. No Gmail writes."""
     service = get_gmail_service(mode="readonly", account=account)
 
     response = service.users().messages().list(
-        userId="me",
-        q="category:promotions OR category:updates",
-        maxResults=max_results,
+        userId="me", q=_QUERY, maxResults=max_results,
     ).execute()
-    messages = response.get("messages", [])
+    msgs = response.get("messages", [])
 
-    sender_subjects: dict[str, list[str]] = defaultdict(list)
-    for stub in messages:
+    sender_data: dict[str, dict] = {}
+    for stub in msgs:
         try:
             hdrs = _get_headers(service, stub["id"])
         except Exception:
@@ -110,66 +251,97 @@ def scan_junk_senders(account: str = "primary", max_results: int = MAX_MESSAGES)
         addr = extract_email(raw_from)
         if not addr or not is_valid_email(addr):
             continue
-        sender_subjects[addr].append(subject)
+        if addr not in sender_data:
+            sender_data[addr] = {
+                "display_name": _extract_display_name(raw_from),
+                "subjects": [],
+            }
+        sender_data[addr]["subjects"].append(subject)
 
     candidates: list[dict] = []
-    for addr, subjects in sender_subjects.items():
-        if is_system_sender(addr):
-            continue
-        if _is_protected(addr, subjects):
-            continue
-        sig_count, signals = _count_junk_signals(subjects)
-        risk = _risk_score(len(subjects), sig_count)
-        candidates.append({
+    archive_only: list[dict] = []
+    excluded: list[dict] = []
+
+    for addr, data in sender_data.items():
+        subjects = data["subjects"]
+        rec, risk, reason = _classify(addr, data["display_name"], subjects)
+        profile = {
             "sender": addr,
+            "display_name": data["display_name"],
             "count": len(subjects),
             "samples": subjects[:SAMPLE_SIZE],
-            "reason": (
-                f"newsletter/promo signals ({sig_count}): "
-                + (", ".join(signals[:3]) if signals else "volume/category")
-            ),
+            "recommendation_class": rec,
             "risk_score": risk,
-            "safe_to_review": risk <= 30,
-        })
+            "reason": reason,
+            "safe_to_review": rec == SAFE,
+        }
+        if rec == SAFE:
+            candidates.append(profile)
+        elif rec == ARCHIVE_ONLY:
+            archive_only.append(profile)
+        else:
+            excluded.append(profile)
 
-    candidates.sort(key=lambda x: (-x["count"], x["risk_score"]))
-    return candidates
+    candidates.sort(key=lambda x: (x["risk_score"], -x["count"]))
+    archive_only.sort(key=lambda x: -x["count"])
+
+    return {
+        "messages_scanned": len(msgs),
+        "profiles_total": len(sender_data),
+        "candidates": candidates,
+        "archive_only": archive_only,
+        "excluded": excluded,
+    }
 
 
 def junk_sender_scout_message(account: str = "primary") -> str:
     """Entry point for natural_intent routing. Always read-only."""
     try:
-        candidates = scan_junk_senders(account=account)
+        result = scan_junk_senders(account=account)
     except Exception as exc:
         return f"Junk Sender Scout failed: {exc}\n\nNo Gmail changes made."
 
-    if not candidates:
-        return (
-            "Junk Sender Scout: no newsletter or promo sender candidates found "
-            f"({account} account).\n\n"
-            "This scans Gmail's promotions and updates categories across all mail. "
-            "If your inbox is already well-sorted, this is expected.\n\n"
-            "No Gmail changes made."
-        )
+    candidates = result["candidates"]
+    archive_only = result["archive_only"]
+    excluded = result["excluded"]
 
-    reviewable = [c for c in candidates if c["safe_to_review"]]
     lines = [
         f"Junk Sender Scout — {account} account",
-        f"Found {len(candidates)} newsletter/promo candidate(s) "
-        f"({len(reviewable)} marked safe to review for blocking).",
+        "Scope: All Mail (promotions + updates), archived-capable",
+        f"Scanned: {result['messages_scanned']} messages, "
+        f"{result['profiles_total']} sender profile(s)",
         "",
     ]
 
-    for i, c in enumerate(candidates[:20], 1):
-        marker = "[safe to review]" if c["safe_to_review"] else "[needs review]"
-        lines.append(f"{i}. {c['sender']} — {c['count']} email(s) {marker}")
-        for s in c["samples"]:
-            lines.append(f"   \"{s}\"")
-        lines.append(f"   Risk {c['risk_score']} — {c['reason']}")
+    if not candidates:
+        lines += [
+            "No block-review candidates found.",
+            "All senders were protected, archive-only, or low-evidence.",
+            "",
+        ]
+    else:
+        lines.append(f"Block-review candidates ({len(candidates)}):")
         lines.append("")
+        for i, c in enumerate(candidates[:10], 1):
+            dn = f" ({c['display_name']})" if c["display_name"] else ""
+            lines.append(
+                f"{i}. {c['sender']}{dn} — {c['count']} email(s) [risk {c['risk_score']}]"
+            )
+            for s in c["samples"]:
+                lines.append(f'   "{s}"')
+            lines.append(f"   {c['reason']}")
+            lines.append("")
+        if len(candidates) > 10:
+            lines.append(f"... and {len(candidates) - 10} more.")
+            lines.append("")
 
-    if len(candidates) > 20:
-        lines.append(f"... and {len(candidates) - 20} more.")
+    parts = []
+    if excluded:
+        parts.append(f"{len(excluded)} excluded (protected/sensitive)")
+    if archive_only:
+        parts.append(f"{len(archive_only)} archive-only (useful, don't block)")
+    if parts:
+        lines.append("Filtered out: " + ", ".join(parts))
         lines.append("")
 
     lines.append("No Gmail changes made.")
