@@ -16,18 +16,18 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 
 class TestInboxZeroRouting(unittest.TestCase):
-    """sort all and variants must route to run_inbox_zero_autopilot, not sort_plan_message."""
+    """sort all and variants must route to _run_both_inbox_zero (both accounts) by default."""
 
     def _assert_routes_to_inbox_zero(self, phrase: str) -> None:
         from inbox_scout import natural_intent
 
         called = []
 
-        def fake_inbox_zero(text: str, account="primary") -> str:
+        def fake_both(text: str) -> str:
             called.append(text)
             return "inbox_zero called"
 
-        with patch("inbox_scout.natural_intent.run_inbox_zero_autopilot", fake_inbox_zero):
+        with patch("inbox_scout.natural_intent._run_both_inbox_zero", fake_both):
             result = natural_intent.handle_natural_message(phrase)
 
         self.assertEqual(result, "inbox_zero called", f"Expected inbox-zero autopilot for: {phrase!r}")
@@ -99,6 +99,52 @@ class TestInboxZeroRouting(unittest.TestCase):
 
         self.assertNotIn("inbox_zero", called, "clean my inbox must NOT route to inbox-zero")
         self.assertIn("autopilot", called, "clean my inbox must route to run_autopilot_cleanup")
+
+
+class TestInboxZeroAccountRouting(unittest.TestCase):
+    """Bare sort all defaults to both; explicit primary/secondary routes to one account."""
+
+    def test_sort_all_routes_to_both_accounts(self):
+        from inbox_scout import natural_intent
+        called = []
+
+        def fake_both(text):
+            called.append("both")
+            return "both called"
+
+        with patch("inbox_scout.natural_intent._run_both_inbox_zero", fake_both):
+            result = natural_intent.handle_natural_message("sort all")
+
+        self.assertEqual(called, ["both"], "bare 'sort all' must route to both accounts")
+        self.assertEqual(result, "both called")
+
+    def test_sort_primary_routes_to_primary_only(self):
+        from inbox_scout import natural_intent
+        accounts = []
+
+        def fake_single(text, account="primary"):
+            accounts.append(account)
+            return f"single called {account}"
+
+        with patch("inbox_scout.natural_intent.run_inbox_zero_autopilot", fake_single):
+            result = natural_intent.handle_natural_message("sort all primary email")
+
+        self.assertEqual(accounts, ["primary"])
+        self.assertIn("primary", result)
+
+    def test_sort_secondary_routes_to_secondary_only(self):
+        from inbox_scout import natural_intent
+        accounts = []
+
+        def fake_single(text, account="primary"):
+            accounts.append(account)
+            return f"single called {account}"
+
+        with patch("inbox_scout.natural_intent.run_inbox_zero_autopilot", fake_single):
+            result = natural_intent.handle_natural_message("sort all secondary email")
+
+        self.assertEqual(accounts, ["secondary"])
+        self.assertIn("secondary", result)
 
 
 class TestInboxZeroCap(unittest.TestCase):

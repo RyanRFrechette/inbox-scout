@@ -190,16 +190,15 @@ class TestDeterministicRoutesUnchanged(unittest.TestCase):
     """Existing deterministic routing must be unaffected by this change."""
 
     def test_sort_all_does_not_hit_llm_or_gate(self):
-        # "sort all" is in _INBOX_ZERO_PHRASES → routes to run_inbox_zero_autopilot directly,
+        # "sort all" is in _INBOX_ZERO_PHRASES → routes to _run_both_inbox_zero directly,
         # bypassing both the LLM and the confirmation gate.
         from inbox_scout import natural_intent as ni
         with patch("inbox_scout.natural_intent.parse_intent") as mock_llm, \
-             patch("inbox_scout.natural_intent.run_inbox_zero_autopilot", return_value="AUTOPILOT_OK") as mock_run:
+             patch("inbox_scout.natural_intent._run_both_inbox_zero", return_value="BOTH_OK") as mock_both:
             result = ni.handle_natural_message("sort all")
         mock_llm.assert_not_called()
-        # Confirm gate not involved — run_inbox_zero_autopilot called directly (existing behavior)
-        mock_run.assert_called_once()
-        self.assertEqual(result, "AUTOPILOT_OK")
+        mock_both.assert_called_once()
+        self.assertEqual(result, "BOTH_OK")
 
     def test_inbox_count_phrase_still_deterministic(self):
         from inbox_scout import natural_intent as ni

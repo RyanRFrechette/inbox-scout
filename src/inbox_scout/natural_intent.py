@@ -793,10 +793,9 @@ def handle_natural_message(text: str) -> str:
 
     if _is_inbox_zero(msg):
         _scope = _parse_account(text)
-        if _scope == "both":
+        if _scope in ("both", "unspecified"):
             return _run_both_inbox_zero(text)
-        _account = "primary" if _scope == "unspecified" else _scope
-        return run_inbox_zero_autopilot(text, account=_account)
+        return run_inbox_zero_autopilot(text, account=_scope)
 
     if _is_autopilot_cleanup(msg):
         _scope = _parse_account(text)
