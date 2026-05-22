@@ -279,7 +279,7 @@ class TestProcessNonTrashItems(unittest.TestCase):
         call_args = svc.users().messages().modify.call_args
         self.assertIn("INBOX", call_args.kwargs["body"]["removeLabelIds"])
 
-    def test_protected_item_archived_after_label(self):
+    def test_protected_item_not_archived(self):
         from inbox_scout.autopilot_cleanup import _process_non_trash_items
 
         svc = self._make_service()
@@ -291,13 +291,11 @@ class TestProcessNonTrashItems(unittest.TestCase):
         }]
         result = _process_non_trash_items(svc, items, {})
 
-        self.assertEqual(result["archived"], 1, "Protected items must be archived after label success")
+        self.assertEqual(result["archived"], 0, "Protected items must NOT be archived")
         self.assertEqual(result["protected"], 1)
-        call_args = svc.users().messages().modify.call_args
-        remove_labels = call_args.kwargs["body"]["removeLabelIds"]
-        self.assertIn("INBOX", remove_labels, "Protected items must have INBOX removed after label success")
+        svc.users().messages().modify.assert_not_called()
 
-    def test_protected_item_marked_read(self):
+    def test_protected_item_not_marked_read(self):
         from inbox_scout.autopilot_cleanup import _process_non_trash_items
 
         svc = self._make_service()
@@ -309,7 +307,8 @@ class TestProcessNonTrashItems(unittest.TestCase):
         }]
         result = _process_non_trash_items(svc, items, {})
 
-        self.assertEqual(result["marked_read"], 1, "Protected items should still be marked read")
+        self.assertEqual(result["marked_read"], 0, "Protected items must NOT be marked read")
+        svc.users().messages().modify.assert_not_called()
 
     def test_protected_item_not_permanently_deleted(self):
         from inbox_scout.autopilot_cleanup import _process_non_trash_items
@@ -337,7 +336,7 @@ class TestProcessNonTrashItems(unittest.TestCase):
 
         svc.users().messages().delete.assert_not_called()
 
-    def test_manual_review_item_archived_after_label(self):
+    def test_manual_review_item_not_archived(self):
         from inbox_scout.autopilot_cleanup import _process_non_trash_items
 
         svc = self._make_service()
@@ -349,10 +348,29 @@ class TestProcessNonTrashItems(unittest.TestCase):
         }]
         result = _process_non_trash_items(svc, items, {})
 
-        self.assertEqual(result["archived"], 1, "manual_review items must be archived after label success")
-        call_args = svc.users().messages().modify.call_args
-        remove_labels = call_args.kwargs["body"]["removeLabelIds"]
-        self.assertIn("INBOX", remove_labels, "manual_review items must have INBOX removed after label success")
+        self.assertEqual(result["archived"], 0, "manual_review items must NOT be archived")
+        self.assertEqual(result["marked_read"], 0, "manual_review items must NOT be marked read")
+        svc.users().messages().modify.assert_not_called()
+
+    def test_protected_and_safe_items_mixed(self):
+        """Safe item is processed; protected item beside it receives no Gmail modify call."""
+        from inbox_scout.autopilot_cleanup import _process_non_trash_items
+
+        svc = self._make_service()
+        items = [
+            {"gmail_message_id": "MSG_SAFE", "category": "newsletter", "risk_score": 5},
+            {"gmail_message_id": "MSG_PROT", "category": "finance", "risk_score": 5, "manual_review": True},
+        ]
+        result = _process_non_trash_items(svc, items, {})
+
+        self.assertEqual(result["labeled"], 1)
+        self.assertEqual(result["archived"], 1)
+        self.assertEqual(result["marked_read"], 1)
+        self.assertEqual(result["protected"], 1)
+        modify_calls = svc.users().messages().modify.call_args_list
+        self.assertEqual(len(modify_calls), 1, "modify must only be called for the safe item")
+        called_id = modify_calls[0].kwargs["id"]
+        self.assertEqual(called_id, "MSG_SAFE")
 
     def test_items_missing_message_id_counted_as_errors(self):
         from inbox_scout.autopilot_cleanup import _process_non_trash_items
@@ -793,8 +811,8 @@ class TestAlwaysRemoveInboxOnLabel(unittest.TestCase):
         remove_labels = call_args.kwargs["body"]["removeLabelIds"]
         self.assertIn("INBOX", remove_labels)
 
-    def test_protected_item_has_inbox_removed(self):
-        """Protected items must have INBOX removed after label success (archiving is recoverable)."""
+    def test_protected_item_inbox_not_removed(self):
+        """Protected items must NOT have INBOX removed — no archive, no mark-read."""
         from inbox_scout.autopilot_cleanup import _process_non_trash_items
         svc = self._make_service()
         items = [{
@@ -804,10 +822,9 @@ class TestAlwaysRemoveInboxOnLabel(unittest.TestCase):
             "local_decision": "protected_review",
         }]
         result = _process_non_trash_items(svc, items, {})
-        self.assertEqual(result["archived"], 1)
-        call_args = svc.users().messages().modify.call_args
-        remove_labels = call_args.kwargs["body"]["removeLabelIds"]
-        self.assertIn("INBOX", remove_labels, "Protected items must have INBOX removed after label success")
+        self.assertEqual(result["archived"], 0)
+        self.assertEqual(result["marked_read"], 0)
+        svc.users().messages().modify.assert_not_called()
 
     def test_label_fail_does_not_remove_inbox(self):
         """If label lookup fails, INBOX must not be removed."""

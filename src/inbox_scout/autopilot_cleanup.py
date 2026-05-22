@@ -583,6 +583,7 @@ def _process_non_trash_items(service: Any, items: list[dict], label_cache: dict)
 
         if protected:
             protected_count += 1
+            continue  # never label, archive, or mark-read protected/manual-review items
 
         try:
             service.users().messages().modify(
