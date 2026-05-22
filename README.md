@@ -447,6 +447,19 @@ python -m inbox_scout.telegram_watch
 The worker auto-decodes token env vars to disk on startup (only if the files are missing).
 `render.yaml` is included as a deploy config reference; adapt env var names for DigitalOcean App Platform or your VPS setup.
 
+### 3b. Auto-deploy on push (GitHub Actions)
+
+A workflow at `.github/workflows/deploy.yml` triggers a DigitalOcean App Platform redeploy automatically on every push to `master`.
+
+**Required GitHub secrets** (Settings → Secrets → Actions):
+
+| Secret | How to get it |
+|--------|--------------|
+| `DIGITALOCEAN_ACCESS_TOKEN` | DigitalOcean dashboard → API → Personal Access Tokens → Generate Token (write scope) |
+| `DIGITALOCEAN_APP_ID` | `doctl apps list` or the App Platform URL: `cloud.digitalocean.com/apps/<APP_ID>` |
+
+**To test after adding secrets:** push any commit to `master` and check the Actions tab in GitHub — the "Deploy to DigitalOcean" workflow should appear, run, and pass. Then send `status` in Telegram to confirm the new worker is live.
+
 ### 4. Verify deployment
 
 After the worker starts, send in Telegram:
