@@ -931,6 +931,140 @@ class TestSortAllScansTotalInbox(unittest.TestCase):
         self.assertIn("Nothing permanently deleted", result)
 
 
+class TestNoProgressStop(unittest.TestCase):
+    """Autopilot must stop cleanly when a batch makes no progress (all protected)."""
+
+    def _protected_items(self, n: int = 3) -> list:
+        return [
+            {"gmail_message_id": f"PROT_{i}", "category": "finance",
+             "risk_score": 5, "manual_review": True}
+            for i in range(n)
+        ]
+
+    def _base_patches(self, item_batches: list):
+        """item_batches: list of return values for successive _load_items_from_queue calls."""
+        call_count = [0]
+
+        def fake_items():
+            idx = call_count[0]
+            call_count[0] += 1
+            if idx < len(item_batches):
+                return item_batches[idx]
+            return []
+
+        mock_plan = MagicMock()
+        mock_plan.workflow_mode = "commands_planned"
+        mock_plan.requested_limit = 25
+
+        mock_cleanup = MagicMock()
+        mock_cleanup.trash_candidate_count = 0
+
+        return dict(
+            _get_modify_service_for_autopilot=MagicMock(return_value=MagicMock()),
+            _get_unread_inbox_count=MagicMock(return_value=3),
+            _get_total_inbox_count=MagicMock(return_value=3),
+            build_scan_queue_plan=MagicMock(return_value=mock_plan),
+            save_plan=MagicMock(),
+            _run_scan=MagicMock(return_value=MagicMock(returncode=0)),
+            _load_json=MagicMock(return_value={"status": "complete"}),
+            _load_items_from_queue=MagicMock(side_effect=fake_items),
+            build_inbox_cleanup_plan=MagicMock(return_value=mock_cleanup),
+            _beep_once=MagicMock(),
+        )
+
+    def test_all_protected_batch_stops_not_loops(self):
+        """All-protected batch: scan called exactly once, then stops."""
+        from inbox_scout import autopilot_cleanup as ac
+
+        scan_calls = [0]
+
+        def count_scan(account="primary"):
+            scan_calls[0] += 1
+            return MagicMock(returncode=0)
+
+        patches = self._base_patches([self._protected_items()])
+        patches["_run_scan"] = MagicMock(side_effect=count_scan)
+        patches["_process_non_trash_items"] = MagicMock(return_value={
+            "labeled": 0, "archived": 0, "marked_read": 0, "protected": 3, "errors": 0,
+        })
+
+        with unittest.mock.patch.multiple("inbox_scout.autopilot_cleanup", **patches):
+            ac.run_inbox_zero_autopilot("sort all")
+
+        self.assertEqual(scan_calls[0], 1, "Must stop after 1 scan when all items are protected")
+
+    def test_all_protected_result_mentions_review(self):
+        from inbox_scout import autopilot_cleanup as ac
+
+        patches = self._base_patches([self._protected_items()])
+        patches["_process_non_trash_items"] = MagicMock(return_value={
+            "labeled": 0, "archived": 0, "marked_read": 0, "protected": 3, "errors": 0,
+        })
+
+        with unittest.mock.patch.multiple("inbox_scout.autopilot_cleanup", **patches):
+            result = ac.run_inbox_zero_autopilot("sort all")
+
+        self.assertTrue(
+            any(w in result.lower() for w in ("review", "manual")),
+            f"Result must mention review/manual attention. Got: {result!r}",
+        )
+
+    def test_all_protected_no_error_midway_message(self):
+        from inbox_scout import autopilot_cleanup as ac
+
+        patches = self._base_patches([self._protected_items()])
+        patches["_process_non_trash_items"] = MagicMock(return_value={
+            "labeled": 0, "archived": 0, "marked_read": 0, "protected": 3, "errors": 0,
+        })
+
+        with unittest.mock.patch.multiple("inbox_scout.autopilot_cleanup", **patches):
+            result = ac.run_inbox_zero_autopilot("sort all")
+
+        self.assertNotIn("error midway", result.lower(),
+                         "Must not say 'error midway' for an all-protected stop")
+
+    def test_mixed_safe_protected_continues_then_stops(self):
+        """Batch 1 has safe+protected → progress → loop.
+        Batch 2 has protected only → no progress → stop cleanly."""
+        from inbox_scout import autopilot_cleanup as ac
+
+        safe_then_protected = [
+            # batch 1: one safe, one protected
+            [
+                {"gmail_message_id": "SAFE_1", "category": "newsletter", "risk_score": 5},
+                {"gmail_message_id": "PROT_1", "category": "finance", "risk_score": 5, "manual_review": True},
+            ],
+            # batch 2: only protected
+            [
+                {"gmail_message_id": "PROT_1", "category": "finance", "risk_score": 5, "manual_review": True},
+                {"gmail_message_id": "PROT_2", "category": "legal", "risk_score": 5, "manual_review": True},
+            ],
+        ]
+
+        process_returns = iter([
+            {"labeled": 1, "archived": 1, "marked_read": 1, "protected": 1, "errors": 0},
+            {"labeled": 0, "archived": 0, "marked_read": 0, "protected": 2, "errors": 0},
+        ])
+
+        scan_calls = [0]
+
+        def count_scan(account="primary"):
+            scan_calls[0] += 1
+            return MagicMock(returncode=0)
+
+        patches = self._base_patches(safe_then_protected)
+        patches["_run_scan"] = MagicMock(side_effect=count_scan)
+        patches["_process_non_trash_items"] = MagicMock(side_effect=lambda svc, items, cache: next(process_returns))
+
+        with unittest.mock.patch.multiple("inbox_scout.autopilot_cleanup", **patches):
+            result = ac.run_inbox_zero_autopilot("sort all")
+
+        self.assertEqual(scan_calls[0], 2,
+                         "Must scan twice: once with progress, once all-protected then stop")
+        self.assertNotIn("error midway", result.lower())
+        self.assertTrue(any(w in result.lower() for w in ("review", "manual")))
+
+
 class TestRunnerAllowsInboxTarget(unittest.TestCase):
     """sort_scan_queue_runner must allow target='inbox' and skip --unread-only."""
 

@@ -656,6 +656,7 @@ def run_inbox_zero_autopilot(text: str, account: str = "primary", _collect: list
         )
 
     label_cache: dict = {}
+    no_progress_stop = False
     cursor_path = PLANS_DIR / "latest_gmail_scan_cursor.json"
 
     # Always start from page 1; delete any saved cursor.
@@ -698,6 +699,7 @@ def run_inbox_zero_autopilot(text: str, account: str = "primary", _collect: list
         total_scanned += len(items)
 
         # Trash safe candidates; count only actual successes.
+        trashed_before = total_trashed
         cleanup_plan = build_inbox_cleanup_plan()
         if cleanup_plan.trash_candidate_count > 0:
             runner_msg = build_inbox_cleanup_runner_message()
@@ -713,6 +715,15 @@ def run_inbox_zero_autopilot(text: str, account: str = "primary", _collect: list
         total_marked_read += result_data["marked_read"]
         total_protected += result_data["protected"]
         total_errors += result_data["errors"]
+
+        # No-progress guard: if this batch found items but nothing was trashed,
+        # labeled, archived, or marked-read, all remaining items are protected/
+        # manual-review. Stop now to avoid looping forever on the same emails.
+        trashed_this_iter = total_trashed - trashed_before
+        if trashed_this_iter + result_data["labeled"] == 0 and items:
+            no_progress_stop = True
+            stopped_early = True
+            break
 
     emergency_cap_hit = total_scanned >= AUTOPILOT_EMERGENCY_CAP
     complete = not stopped_early and not emergency_cap_hit
@@ -731,7 +742,9 @@ def run_inbox_zero_autopilot(text: str, account: str = "primary", _collect: list
     ]
     if total_errors:
         lines.append(f"Couldn't process: {total_errors}")
-    if stopped_early and not emergency_cap_hit:
+    if no_progress_stop:
+        lines.append("All remaining emails need your review — auto-sort skipped them.")
+    elif stopped_early and not emergency_cap_hit:
         lines.append("Hit an error midway — run sort all again to continue.")
     if emergency_cap_hit:
         lines.extend(["", f"Hit the safety limit ({AUTOPILOT_EMERGENCY_CAP} emails) — run sort all again to continue."])
