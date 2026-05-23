@@ -125,5 +125,48 @@ class TestAutopilotRouting(unittest.TestCase):
         self.assertFalse(_is_autopilot_cleanup("status"))
 
 
+class TestFilingModeGuard(unittest.TestCase):
+    _FILING_STUB = "Inbox Filing Mode preview is not implemented yet."
+    _AUTOPILOT_CONFIRM = "CONFIRM INBOX AUTOPILOT"
+
+    def _route(self, phrase: str) -> str:
+        from inbox_scout import natural_intent
+        with patch.object(natural_intent, "_llm_fallback", return_value="LLM_FALLBACK"):
+            return natural_intent.handle_natural_message(phrase)
+
+    def test_file_inbox_not_autopilot(self):
+        result = self._route("file inbox")
+        self.assertNotIn(self._AUTOPILOT_CONFIRM, result)
+
+    def test_file_safe_emails_not_autopilot(self):
+        result = self._route("file safe emails")
+        self.assertNotIn(self._AUTOPILOT_CONFIRM, result)
+
+    def test_preview_filing_not_autopilot(self):
+        result = self._route("preview filing")
+        self.assertNotIn(self._AUTOPILOT_CONFIRM, result)
+
+    def test_file_inbox_returns_stub(self):
+        self.assertIn(self._FILING_STUB, self._route("file inbox"))
+
+    def test_file_safe_emails_returns_stub(self):
+        self.assertIn(self._FILING_STUB, self._route("file safe emails"))
+
+    def test_preview_filing_returns_stub(self):
+        self.assertIn(self._FILING_STUB, self._route("preview filing"))
+
+    def test_sort_all_not_affected(self):
+        from inbox_scout import natural_intent
+        with patch.object(natural_intent, "_inbox_zero_preview_prompt", return_value="INBOX_ZERO"):
+            result = natural_intent.handle_natural_message("sort all")
+        self.assertNotIn(self._FILING_STUB, result)
+
+    def test_confirm_autopilot_not_filing_stub(self):
+        from inbox_scout import natural_intent
+        with patch.object(natural_intent, "_llm_fallback", return_value="LLM_FALLBACK"):
+            result = natural_intent.handle_natural_message("confirm inbox autopilot")
+        self.assertNotIn(self._FILING_STUB, result)
+
+
 if __name__ == "__main__":
     unittest.main()

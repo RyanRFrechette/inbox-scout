@@ -984,6 +984,14 @@ def handle_natural_message(text: str) -> str:
     ]):
         return sort_plan_message(text)
 
+    if any(phrase in msg for phrase in ("file inbox", "file safe emails", "preview filing")):
+        return (
+            "Inbox Filing Mode preview is not implemented yet.\n\n"
+            "No Gmail changes made.\n\n"
+            "This command is reserved for safe label/archive/mark-read planning only.\n"
+            "It will not use inbox autopilot or trash-capable cleanup."
+        )
+
     return _llm_fallback(text)
 
 
