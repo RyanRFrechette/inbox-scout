@@ -101,6 +101,19 @@ class TestCleanupEtaMsg(unittest.TestCase):
             msg = tl._cleanup_eta_msg()
         self.assertIn("10", msg)
 
+    def test_eta_returns_none_when_both_zero_unread(self):
+        import inbox_scout.telegram_listener as tl
+        with patch.object(tl, "_fetch_inbox_counts", side_effect=[(0, 1), (0, 0)]):
+            msg = tl._cleanup_eta_msg()
+        self.assertIsNone(msg)
+
+    def test_eta_not_none_when_one_account_fails_and_other_zero(self):
+        import inbox_scout.telegram_listener as tl
+        # primary fails, secondary 0 — should NOT return None (uncertain state)
+        with patch.object(tl, "_fetch_inbox_counts", side_effect=[(-1, -1), (0, 0)]):
+            msg = tl._cleanup_eta_msg()
+        self.assertIsNotNone(msg)
+
 
 class TestCleanupThread(unittest.TestCase):
     def test_calls_run_both_inbox_zero(self):
@@ -217,6 +230,30 @@ class TestRunOnceAutonomousCleanupRouting(unittest.TestCase):
         sent, threads = self._run_with_message("clean up")
         self.assertEqual(len(threads), 1)
         self.assertEqual(threads[0]._target.__name__, "_cleanup_thread")
+
+    def test_zero_unread_sends_caught_up_and_no_thread(self):
+        import inbox_scout.telegram_listener as tl
+        sent = []
+        started_threads = []
+
+        class FakeThread:
+            def __init__(self, target=None, args=(), daemon=False):
+                started_threads.append(self)
+            def start(self):
+                pass
+
+        with patch.object(tl, "load_config", return_value={"telegram_chat_id": "12345"}), \
+             patch.object(tl, "load_state", return_value={"offset": 0}), \
+             patch.object(tl, "save_state"), \
+             patch.object(tl, "get_updates", return_value=[self._make_update("cleanup")]), \
+             patch.object(tl, "send_message", side_effect=sent.append), \
+             patch.object(tl, "_cleanup_eta_msg", return_value=None), \
+             patch("inbox_scout.telegram_listener.threading.Thread", FakeThread):
+            tl.run_once()
+
+        self.assertEqual(len(started_threads), 0, "No thread should start when inboxes are caught up")
+        self.assertGreater(len(sent), 0)
+        self.assertIn("caught up", sent[0])
 
 
 if __name__ == "__main__":

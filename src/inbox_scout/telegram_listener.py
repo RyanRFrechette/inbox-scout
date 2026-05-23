@@ -59,12 +59,15 @@ def _is_autonomous_cleanup_command(msg: str) -> bool:
     return msg.strip() in _AUTONOMOUS_CLEANUP_PHRASES
 
 
-def _cleanup_eta_msg() -> str:
+def _cleanup_eta_msg() -> str | None:
+    """Return ETA string, None if both accounts have 0 unread, or fallback string if counts unavailable."""
     p_unread, _ = _fetch_inbox_counts("primary")
     s_unread, _ = _fetch_inbox_counts("secondary")
     if p_unread < 0 and s_unread < 0:
         return "Starting inbox cleanup. This may take a few minutes."
     total = max(p_unread, 0) + max(s_unread, 0)
+    if p_unread >= 0 and s_unread >= 0 and total == 0:
+        return None
     batches = max(1, math.ceil(total / AUTOPILOT_MAX_LIMIT))
     eta_mins = max(1, batches)
     unread_word = "email" if total == 1 else "emails"
@@ -299,11 +302,17 @@ def run_once() -> None:
         is_resort_preview = any(phrase in _msg_lower for phrase in _RESORT_PREVIEW_PHRASES)
         if is_autonomous_cleanup:
             eta_msg = _cleanup_eta_msg()
-            try:
-                send_message(eta_msg)
-            except Exception as _eta_exc:
-                _log_error(f"cleanup ETA send failed: {_eta_exc}")
-            threading.Thread(target=_cleanup_thread, args=(text,), daemon=True).start()
+            if eta_msg is None:
+                try:
+                    send_message("Both inboxes are already caught up. 0 unread emails found. No Gmail changes made.")
+                except Exception as _eta_exc:
+                    _log_error(f"cleanup caught-up send failed: {_eta_exc}")
+            else:
+                try:
+                    send_message(eta_msg)
+                except Exception as _eta_exc:
+                    _log_error(f"cleanup ETA send failed: {_eta_exc}")
+                threading.Thread(target=_cleanup_thread, args=(text,), daemon=True).start()
         elif is_resort_run or is_resort_preview:
             if is_resort_run:
                 ack = "Got it — scanning your sorted folders and applying safe label corrections. Labels only, no trash or delete."
