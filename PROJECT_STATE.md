@@ -1,6 +1,6 @@
 ﻿# Inbox Scout - Project State
 
-Last updated: 2026-05-23 (Autonomous Cleanup Mode — live test passed)
+Last updated: 2026-05-23 (Inbox Filing Mode v1A preview — live test passed)
 
 ## Current location
 C:\Users\ryanr\inbox-scout

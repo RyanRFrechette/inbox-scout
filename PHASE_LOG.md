@@ -386,6 +386,38 @@ Commits: 6091e7d, d7e57a0, 78f7acc, 37e44ab, 7dd7441
 
 ---
 
+## 2026-05-23 - Inbox Filing Mode v1A checkpoint
+Status: COMPLETE (code + live test)
+Commits: 9bdd88b, 9f896cc, 5db0b4a, 6b67bd2
+
+### What shipped
+- **Routing safety guard** (9bdd88b): `natural_intent.py` — `file inbox`, `file safe emails`, `preview filing` reserved with deterministic guard before LLM fallback; returns safe stub instead of falling through to inbox_zero_autopilot.
+- **Inbox Filing Preview** (9f896cc): new `inbox_filing_runner.py` — reads latest queue, buckets by category/risk/protected into: safe_filing (label+archive+mark-read), label_only (shopping_history_soft), untouched (all sensitive/high-risk/protected). Bug fixed: `_risk()` used `or 999` which falsely treated risk_score=0 as missing; fixed to explicit `is None` check.
+- **Apply guard (natural_intent)** (5db0b4a): `apply filing`, `confirm filing`, `run filing` return safe not-implemented message from `natural_intent.py`.
+- **Apply guard (Telegram)** (6b67bd2): `telegram_listener.py` — exact-match pre-guard before `apply *`/`confirm *` startswith checks prevents Telegram Apply Gate from intercepting filing apply commands.
+
+### Live tests — PASSED (2026-05-23)
+- "file inbox" → "Inbox Filing Mode preview / No Gmail changes yet. / Safe: 0, Label only: 0, Untouched: 7" ✓
+- "apply filing" → "Inbox Filing Apply Mode is not implemented yet. No Gmail changes made." ✓
+- No Gmail writes. No permanent delete. No sender blocking. Protected/manual-review untouched ✓
+- Deployed to Droplet via GitHub Actions auto-deploy ✓
+
+### Tests
+- 32 tests in `test_inbox_filing_runner.py` — all pass
+- 9 tests in `test_telegram_listener_filing.py` — all pass
+- 8 tests in `TestFilingModeGuard` (test_natural_intent_autopilot.py) — all pass
+- 8 tests in `TestFilingApplyGuard` (test_inbox_filing_runner.py) — all pass
+
+### Decision: no Gmail-write apply mode yet
+Current preview shows 0 actionable candidates (all 7 secondary-account emails are in protected/high-risk/sensitive categories). Apply mode will be built only after real safe candidates exist and after a safety design pass.
+
+### Next phases
+1. Workflow cleanup/simplification pass (natural_intent.py dead-code, phase backlog)
+2. Sender blocking — for senders already in Trash or clearly promo/newsletter/junk, protected excluded
+3. Filing apply mode (v1B) — label → archive → mark-read, two-step confirmation, PII-free JSONL audit log
+
+---
+
 ## 2026-05-14 - OpenRouter model switching checkpoint
 - Commit 8447418 added OpenRouter model switching and /model commands
 - Added src/inbox_scout/model_router.py
