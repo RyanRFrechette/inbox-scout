@@ -1,6 +1,6 @@
 ﻿# Inbox Scout - Project State
 
-Last updated: 2026-05-14 (Phase 13Z-C live MVP test passed)
+Last updated: 2026-05-23 (Autonomous Cleanup Mode — live test passed)
 
 ## Current location
 C:\Users\ryanr\inbox-scout
@@ -3819,6 +3819,62 @@ To enable: re-authorize Gmail adding the settings scope.
 
 Gmail changes: 0 (scope not yet provisioned)
 Permanent deletes: 0
+
+---
+
+## Autonomous Cleanup Mode — 2026-05-22/23
+Status: COMPLETE (code + live test deployed)
+Commits: 6091e7d, d7e57a0, 78f7acc, 37e44ab, 7dd7441
+
+### Goal
+Replace the "cleanup → yes" two-step flow with a single "cleanup" command that immediately sends an ETA, then runs a full inbox-zero autopilot loop across both Gmail accounts in a background thread.
+
+### Changes
+
+#### report_mode.py (6091e7d)
+- Wrapped `get_active_provider()` call in try/except, defaults to `"local"` on error.
+- Wrapped entire per-email classification block in outer try/except.
+- On failure: `manual_review=True`, `risk_score=99`, `reason="ai_provider_error"`, `suggested_action=""`.
+- Failed emails never become trash/archive/mark-read candidates regardless of provider state.
+
+#### natural_intent.py (d7e57a0)
+- Added `AUTOPILOT_MAX_LIMIT` import.
+- Moved "clean all", "clean up", "cleanup" from `_INBOX_ZERO_PHRASES` to `_AUTOPILOT_PHRASES`.
+- Added `_run_autonomous_cleanup(text, account="primary")`: calls `_fetch_inbox_counts`, builds ETA header (10s/email, ceil/60, min 1 min), prepends to `run_autopilot_cleanup` result.
+- Autopilot cleanup branch now calls `_run_autonomous_cleanup` instead of `run_autopilot_cleanup`.
+
+#### telegram_listener.py (78f7acc, 37e44ab, 7dd7441)
+- Added `_AUTONOMOUS_CLEANUP_PHRASES = frozenset({"cleanup", "clean up", "clean all", "clean my inbox", "get me closer to inbox zero"})`.
+- Added `_is_autonomous_cleanup_command(msg)`: exact match against frozenset.
+- Added `_cleanup_eta_msg()`: sums `_fetch_inbox_counts("primary")` + `_fetch_inbox_counts("secondary")`, returns "There are N unread emails across both accounts. Estimated completion time: about N minutes." or fallback.
+- Added `_cleanup_thread(cmd_text)`: calls `_run_both_inbox_zero`, sends result; on exception logs + sends truthful "Earlier safe actions may have already completed" message.
+- In `run_once()`: cleanup branch sends ETA first, starts daemon thread for `_cleanup_thread`.
+- Imports: replaced `run_inbox_zero_autopilot` with `_run_both_inbox_zero, _fetch_inbox_counts` from natural_intent.
+
+### Safety design
+- Uses `run_inbox_zero_autopilot` safety gates (no-progress guard, emergency cap 5000, protected/manual-review skip).
+- `_run_both_inbox_zero` runs primary then secondary, each independently gated.
+- Failure message never says "Gmail not touched" (inaccurate if autopilot already made moves).
+- No permanent delete, no sender blocking, no archive/label filing.
+- Protected/manual-review emails remain untouched at all times.
+
+### Tests
+- `test_telegram_autonomous_cleanup.py`: 26 tests — all pass
+- `test_natural_intent_autopilot.py`: 14 tests — all pass
+- `test_scan_provider_timeout.py` (classify_for_report): 4 tests — all pass
+
+### Live test — PASSED (2026-05-23)
+- "cleanup" → ETA sent immediately with combined unread count ✓
+- Background thread ran cleanup across both accounts ✓
+- Final summary showed `--- Primary email ---` and `--- Second email ---` sections ✓
+- 7 secondary unread emails flagged for review, 0 auto-moved (safety gates correct) ✓
+- Deployed to Droplet (GitHub Actions → SSH → systemctl restart) ✓
+
+### Next planned phases
+1. **Inbox Filing Mode**: safe label/archive/mark-read for review-but-not-junk emails (unread but clearly known senders).
+2. **Sender blocking**: for senders already in Trash or clearly classified as promo/newsletter/junk; protected senders excluded.
+
+---
 
 ## Sign-off checkpoint - 2026-05-14
 - Last good commit: 8447418 feat: add OpenRouter model switching

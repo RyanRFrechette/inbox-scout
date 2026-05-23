@@ -356,6 +356,36 @@ New command: "block senders in trash" / "block all senders in trash"
 - Phase 14: Permanent delete mode (nuclear, disabled until explicitly enabled)
 - Portfolio/cloud deployment planning
 
+## 2026-05-22/23 - Autonomous Cleanup Mode checkpoint
+Status: COMPLETE (code + live test)
+Commits: 6091e7d, d7e57a0, 78f7acc, 37e44ab, 7dd7441
+
+### What shipped
+- **Scan stability** (6091e7d): `report_mode.py` wrapped every per-email classification in try/except. On failure: manual_review=True, risk_score=99, suggested_action left blank — never produces a trash/archive/mark-read candidate.
+- **Autonomous Cleanup v1** (d7e57a0): bare "cleanup" / "clean up" / "clean all" now route directly to `run_autopilot_cleanup` in `natural_intent.py`. No yes/cancel prompt. Added `_run_autonomous_cleanup` wrapper with ETA header when unread count is available.
+- **Two-message Telegram flow** (78f7acc): `telegram_listener.py` handles cleanup phrases via background thread, same pattern as resort. Sends ETA immediately, then sends full summary when done.
+- **Truthful failure message** (37e44ab): On cleanup thread exception, message says "Earlier safe actions may have already completed" instead of "Gmail not touched" (which was inaccurate since the autopilot may have already made moves).
+- **Both accounts** (7dd7441): ETA and cleanup now scan primary + secondary. `_cleanup_eta_msg` sums both `_fetch_inbox_counts` calls. `_cleanup_thread` calls `_run_both_inbox_zero`.
+
+### Live test — PASSED (2026-05-23)
+- "cleanup" → ETA showed combined unread across both accounts ✓
+- Background thread ran `_run_both_inbox_zero` ✓
+- Final summary showed `--- Primary email ---` and `--- Second email ---` sections ✓
+- 7 secondary-account unread emails were flagged for review, 0 auto-moved (correct: safety gates held) ✓
+- No permanent delete. No sender blocking. No archive/label filing. Protected/manual-review untouched ✓
+- Deployed to Droplet via GitHub Actions auto-deploy ✓
+
+### Tests
+- 26 tests in `test_telegram_autonomous_cleanup.py` — all pass
+- 14 tests in `test_natural_intent_autopilot.py` — all pass
+- 4 tests in `test_scan_provider_timeout.py` (classify_for_report resilience) — all pass
+
+### Next phases
+1. Inbox Filing Mode — safe label/archive/mark-read for review-but-not-junk emails
+2. Sender blocking — for senders already in Trash or clearly classified as promo/newsletter/junk
+
+---
+
 ## 2026-05-14 - OpenRouter model switching checkpoint
 - Commit 8447418 added OpenRouter model switching and /model commands
 - Added src/inbox_scout/model_router.py
