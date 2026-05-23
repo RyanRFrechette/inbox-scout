@@ -12,11 +12,9 @@ from typing import Any
 import requests
 
 from inbox_scout.autopilot_cleanup import (
-    run_inbox_zero_autopilot,
-    _get_modify_service_for_autopilot,
-    _get_unread_inbox_count,
     AUTOPILOT_MAX_LIMIT,
 )
+from inbox_scout.natural_intent import _run_both_inbox_zero, _fetch_inbox_counts
 from inbox_scout.telegram_notifier import load_config, load_token, send_message
 from inbox_scout.telegram_status import build_status_message
 from inbox_scout.telegram_approval import evaluate_approval_command
@@ -62,26 +60,24 @@ def _is_autonomous_cleanup_command(msg: str) -> bool:
 
 
 def _cleanup_eta_msg() -> str:
-    try:
-        svc = _get_modify_service_for_autopilot("primary")
-        unread = _get_unread_inbox_count(svc)
-    except Exception:
-        unread = -1
-    if unread < 0:
+    p_unread, _ = _fetch_inbox_counts("primary")
+    s_unread, _ = _fetch_inbox_counts("secondary")
+    if p_unread < 0 and s_unread < 0:
         return "Starting inbox cleanup. This may take a few minutes."
-    batches = max(1, math.ceil(unread / AUTOPILOT_MAX_LIMIT))
+    total = max(p_unread, 0) + max(s_unread, 0)
+    batches = max(1, math.ceil(total / AUTOPILOT_MAX_LIMIT))
     eta_mins = max(1, batches)
-    unread_word = "email" if unread == 1 else "emails"
+    unread_word = "email" if total == 1 else "emails"
     mins_word = "minute" if eta_mins == 1 else "minutes"
     return (
-        f"There are {unread} unread {unread_word}. "
+        f"There are {total} unread {unread_word} across both accounts. "
         f"Estimated completion time: about {eta_mins} {mins_word}."
     )
 
 
 def _cleanup_thread(cmd_text: str) -> None:
     try:
-        reply = run_inbox_zero_autopilot(cmd_text)
+        reply = _run_both_inbox_zero(cmd_text)
     except Exception as exc:
         _log_error(f"cleanup thread error for {cmd_text!r}:\n{traceback.format_exc()}")
         reply = (

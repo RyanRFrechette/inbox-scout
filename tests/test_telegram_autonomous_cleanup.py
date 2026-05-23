@@ -61,58 +61,66 @@ class TestIsAutonomousCleanupCommand(unittest.TestCase):
 
 
 class TestCleanupEtaMsg(unittest.TestCase):
-    def test_eta_includes_unread_count_and_minutes(self):
+    def test_eta_sums_both_accounts(self):
         import inbox_scout.telegram_listener as tl
-        mock_svc = MagicMock()
-        with patch.object(tl, "_get_modify_service_for_autopilot", return_value=mock_svc), \
-             patch.object(tl, "_get_unread_inbox_count", return_value=50), \
+        # primary=30, secondary=20 → total=50, 2 batches, 2 minutes
+        with patch.object(tl, "_fetch_inbox_counts", side_effect=[(30, 100), (20, 80)]), \
              patch.object(tl, "AUTOPILOT_MAX_LIMIT", 25):
             msg = tl._cleanup_eta_msg()
         self.assertIn("50", msg)
-        self.assertIn("minute", msg)
+        self.assertIn("both accounts", msg)
+        self.assertIn("2 minute", msg)
 
     def test_eta_math_uses_ceil_batches(self):
         import inbox_scout.telegram_listener as tl
-        mock_svc = MagicMock()
-        with patch.object(tl, "_get_modify_service_for_autopilot", return_value=mock_svc), \
-             patch.object(tl, "_get_unread_inbox_count", return_value=26), \
+        # 26 total / 25 per batch = 2 batches = 2 minutes
+        with patch.object(tl, "_fetch_inbox_counts", side_effect=[(13, 50), (13, 50)]), \
              patch.object(tl, "AUTOPILOT_MAX_LIMIT", 25):
             msg = tl._cleanup_eta_msg()
-        # 26 unread / 25 per batch = 2 batches = 2 minutes
         self.assertIn("2 minute", msg)
 
     def test_eta_minimum_one_minute(self):
         import inbox_scout.telegram_listener as tl
-        mock_svc = MagicMock()
-        with patch.object(tl, "_get_modify_service_for_autopilot", return_value=mock_svc), \
-             patch.object(tl, "_get_unread_inbox_count", return_value=5), \
+        with patch.object(tl, "_fetch_inbox_counts", side_effect=[(3, 10), (2, 10)]), \
              patch.object(tl, "AUTOPILOT_MAX_LIMIT", 25):
             msg = tl._cleanup_eta_msg()
         self.assertIn("1 minute", msg)
 
-    def test_eta_fallback_when_count_unavailable(self):
+    def test_eta_fallback_when_both_counts_unavailable(self):
         import inbox_scout.telegram_listener as tl
-        with patch.object(tl, "_get_modify_service_for_autopilot", side_effect=Exception("auth fail")):
+        with patch.object(tl, "_fetch_inbox_counts", side_effect=[(-1, -1), (-1, -1)]):
             msg = tl._cleanup_eta_msg()
         self.assertIn("Starting inbox cleanup", msg)
         self.assertNotIn("There are", msg)
-        self.assertNotIn("Read-only", msg)
+
+    def test_eta_partial_fallback_uses_available_count(self):
+        import inbox_scout.telegram_listener as tl
+        # primary fails, secondary has 10
+        with patch.object(tl, "_fetch_inbox_counts", side_effect=[(-1, -1), (10, 50)]), \
+             patch.object(tl, "AUTOPILOT_MAX_LIMIT", 25):
+            msg = tl._cleanup_eta_msg()
+        self.assertIn("10", msg)
 
 
 class TestCleanupThread(unittest.TestCase):
-    def test_sends_autopilot_result(self):
+    def test_calls_run_both_inbox_zero(self):
         import inbox_scout.telegram_listener as tl
+        called = []
+        def fake_both(text):
+            called.append(text)
+            return "--- Primary email ---\nDone.\n\n--- Second email ---\nDone."
         sent = []
-        with patch.object(tl, "run_inbox_zero_autopilot", return_value="Cleanup done. Scanned 10."), \
+        with patch.object(tl, "_run_both_inbox_zero", fake_both), \
              patch.object(tl, "send_message", side_effect=sent.append):
             tl._cleanup_thread("cleanup")
-        self.assertEqual(len(sent), 1)
-        self.assertIn("Cleanup done", sent[0])
+        self.assertEqual(called, ["cleanup"])
+        self.assertIn("Primary email", sent[0])
+        self.assertIn("Second email", sent[0])
 
     def test_exception_sends_safe_failure_message(self):
         import inbox_scout.telegram_listener as tl
         sent = []
-        with patch.object(tl, "run_inbox_zero_autopilot", side_effect=RuntimeError("api down")), \
+        with patch.object(tl, "_run_both_inbox_zero", side_effect=RuntimeError("api down")), \
              patch.object(tl, "send_message", side_effect=sent.append), \
              patch.object(tl, "_log_error"):
             tl._cleanup_thread("cleanup")
@@ -123,7 +131,7 @@ class TestCleanupThread(unittest.TestCase):
     def test_exception_message_does_not_include_trash_or_archive(self):
         import inbox_scout.telegram_listener as tl
         sent = []
-        with patch.object(tl, "run_inbox_zero_autopilot", side_effect=RuntimeError("fail")), \
+        with patch.object(tl, "_run_both_inbox_zero", side_effect=RuntimeError("fail")), \
              patch.object(tl, "send_message", side_effect=sent.append), \
              patch.object(tl, "_log_error"):
             tl._cleanup_thread("cleanup")
