@@ -20,7 +20,7 @@ from inbox_scout.telegram_status import build_status_message
 from inbox_scout.telegram_approval import evaluate_approval_command
 from inbox_scout.telegram_apply_gate import evaluate_apply_gate
 from inbox_scout.telegram_confirm_gate import evaluate_confirm_gate
-from inbox_scout.natural_intent import handle_natural_message
+from inbox_scout.natural_intent import handle_natural_message, help_message, help_message_advanced
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -145,45 +145,11 @@ def load_queue_items() -> list[dict[str, Any]]:
 
 
 def build_help() -> str:
-    return (
-        "Atlas (Inbox Scout) commands:\n\n"
-        "READ-ONLY\n"
-        "help / ping / status / audit / progress report\n"
-        "queue / show emails\n"
-        "next / what needs my attention\n"
-        "inbox count / how many emails\n"
-        "show folders / folder counts\n\n"
-        "SORT (scan + classify — Gmail unchanged)\n"
-        "sort 5 emails / sort N emails\n"
-        "sort all / sort my whole inbox\n"
-        "continue sorting / sort more / next batch\n"
-        "sort plan / review plan\n\n"
-        "CLEANUP (scan → trash plan → confirm)\n"
-        "clean my inbox / clean N emails\n"
-        "get me closer to inbox zero / get me to inbox zero\n"
-        "cleanup status / cancel cleanup\n"
-        "move trash  ← moves approved candidates to Gmail Trash\n\n"
-        "RESORT (re-check already sorted emails)\n"
-        "resort preview / preview resort  ← mismatches only, no changes\n"
-        "resort my sorted emails / audit my archives  ← scan + plan\n"
-        "resort all mail / resort everything  ← exhaustive scan\n"
-        "apply resort fixes  ← applies Gmail label corrections\n\n"
-        "TRASH / ARCHIVE (gate: plan → confirm → execute)\n"
-        "trash candidates / what can go to trash\n"
-        "confirm trash plan / apply trash\n"
-        "archive candidates / archive plan / confirm archive\n\n"
-        "MARK READ (gate)\n"
-        "mark reviewed as read / confirm mark read\n\n"
-        "BLOCK SENDERS (gate)\n"
-        "block senders in trash / BLOCK N TRASH SENDERS\n\n"
-        "MODEL / AI PROVIDER\n"
-        "/model status / /model local / /model openrouter / /model auto\n\n"
-        "CONFIRM / CANCEL\n"
-        "yes / approve / go ahead  ←  confirm pending plan\n"
-        "cancel / stop / never mind  ←  cancel\n\n"
-        "Safety: protected and manual-review emails are always skipped.\n"
-        "No permanent delete. No Gmail changes without your approval."
-    )
+    return help_message()
+
+
+def build_help_advanced() -> str:
+    return help_message_advanced()
 
 
 def build_queue_summary() -> str:
@@ -242,6 +208,9 @@ def build_next_item() -> str:
 
 def handle_command(text: str) -> str:
     command = text.strip().lower()
+
+    if command in {"help advanced", "/help advanced"}:
+        return build_help_advanced()
 
     if command in {"help", "/help", "commands"}:
         return build_help()

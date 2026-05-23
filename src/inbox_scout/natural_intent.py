@@ -466,41 +466,39 @@ def next_review_item() -> str:
 
 def help_message() -> str:
     return (
-        "Atlas (Inbox Scout) commands:\n\n"
-        "READ-ONLY\n"
-        "help / ping / status / audit / progress report\n"
-        "queue / show emails\n"
-        "next / what needs my attention\n"
-        "inbox count / how many emails\n"
-        "show folders / folder counts\n\n"
-        "SORT (scan + classify — Gmail unchanged)\n"
-        "sort 5 emails / sort N emails\n"
-        "sort all / sort my whole inbox\n"
-        "continue sorting / sort more / next batch\n"
-        "sort plan / review plan\n\n"
-        "CLEANUP (scan → trash plan → confirm)\n"
-        "clean my inbox / clean N emails\n"
-        "get me closer to inbox zero / get me to inbox zero\n"
-        "cleanup status / cancel cleanup\n"
-        "move trash  ← moves approved candidates to Gmail Trash\n\n"
-        "RESORT (re-check already sorted emails)\n"
-        "resort preview / preview resort  ← mismatches only, no changes\n"
-        "resort my sorted emails / audit my archives  ← scan + plan\n"
-        "resort all mail / resort everything  ← exhaustive scan\n"
-        "apply resort fixes  ← applies Gmail label corrections\n\n"
-        "TRASH / ARCHIVE (gate: plan → confirm → execute)\n"
-        "trash candidates / what can go to trash\n"
-        "confirm trash plan / apply trash\n"
-        "archive candidates / archive plan / confirm archive\n\n"
-        "MARK READ (gate)\n"
-        "mark reviewed as read / confirm mark read\n\n"
+        "Atlas (Inbox Scout)\n\n"
+        "MAIN COMMANDS\n"
+        "cleanup — safe inbox cleanup (both accounts)\n"
+        "file inbox — preview filing plan (no Gmail changes)\n"
+        "apply filing — not yet available\n\n"
+        "STATUS\n"
+        "status / progress report — inbox state and last run\n"
+        "cancel — cancel any pending action\n"
+        "yes — confirm a pending plan\n\n"
+        "OTHER\n"
+        "ping — health check\n"
+        "queue / next — review local queue\n\n"
+        "/help advanced — show power commands\n\n"
+        "Safety: protected and manual-review emails are always skipped.\n"
+        "No permanent delete. No Gmail changes without your approval."
+    )
+
+
+def help_message_advanced() -> str:
+    return (
+        "Atlas advanced commands:\n\n"
+        "SORT\n"
+        "sort N emails / sort all / continue sorting / sort more / next batch\n\n"
+        "CLEANUP (low-level)\n"
+        "clean my inbox / clean N emails / move trash\n\n"
+        "APPLY\n"
+        "apply trash N / apply archive N / apply markread N\n\n"
+        "RESORT\n"
+        "resort preview / resort my sorted emails / apply resort fixes\n\n"
         "BLOCK SENDERS (gate)\n"
         "block senders in trash / BLOCK N TRASH SENDERS\n\n"
         "MODEL / AI PROVIDER\n"
         "/model status / /model local / /model openrouter / /model auto\n\n"
-        "CONFIRM / CANCEL\n"
-        "yes / approve / go ahead  ←  confirm pending plan\n"
-        "cancel / stop / never mind  ←  cancel\n\n"
         "Safety: protected and manual-review emails are always skipped.\n"
         "No permanent delete. No Gmail changes without your approval."
     )
@@ -685,6 +683,9 @@ def handle_natural_message(text: str) -> str:
         "am i close to inbox zero",
     ]):
         return build_inbox_count_message()
+
+    if any(phrase in msg for phrase in ["help advanced", "/help advanced"]):
+        return help_message_advanced()
 
     if any(word in msg for word in ["help", "commands", "what can you do"]):
         return help_message()
