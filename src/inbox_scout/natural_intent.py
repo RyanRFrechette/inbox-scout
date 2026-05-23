@@ -988,6 +988,13 @@ def handle_natural_message(text: str) -> str:
     if any(phrase in msg for phrase in ("file inbox", "file safe emails", "preview filing")):
         return build_filing_preview()
 
+    if any(phrase in msg for phrase in ("apply filing", "confirm filing", "run filing")):
+        return (
+            "Inbox Filing Apply Mode is not implemented yet.\n\n"
+            "No Gmail changes made.\n\n"
+            "Run 'file inbox' to preview the filing plan first."
+        )
+
     return _llm_fallback(text)
 
 

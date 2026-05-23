@@ -192,5 +192,50 @@ class TestNaturalIntentRouting(unittest.TestCase):
         self.assertNotIn("trash", result.lower())
 
 
+class TestFilingApplyGuard(unittest.TestCase):
+    _STUB = "Inbox Filing Apply Mode is not implemented yet."
+    _AUTOPILOT = "CONFIRM INBOX AUTOPILOT"
+
+    def _route(self, phrase):
+        from inbox_scout import natural_intent
+        with patch("inbox_scout.natural_intent._llm_fallback", return_value="LLM_CALLED") as mock_llm:
+            result = natural_intent.handle_natural_message(phrase)
+            self._mock_llm = mock_llm
+        return result
+
+    def test_apply_filing_returns_stub(self):
+        self.assertIn(self._STUB, self._route("apply filing"))
+
+    def test_confirm_filing_returns_stub(self):
+        self.assertIn(self._STUB, self._route("confirm filing"))
+
+    def test_run_filing_returns_stub(self):
+        self.assertIn(self._STUB, self._route("run filing"))
+
+    def test_apply_filing_not_autopilot(self):
+        self.assertNotIn(self._AUTOPILOT, self._route("apply filing"))
+
+    def test_confirm_filing_not_autopilot(self):
+        self.assertNotIn(self._AUTOPILOT, self._route("confirm filing"))
+
+    def test_apply_filing_not_llm_fallback(self):
+        from inbox_scout import natural_intent
+        with patch("inbox_scout.natural_intent._llm_fallback", return_value="LLM_CALLED") as mock_llm:
+            natural_intent.handle_natural_message("apply filing")
+        mock_llm.assert_not_called()
+
+    def test_file_inbox_preview_still_works(self):
+        from inbox_scout import natural_intent
+        with patch("inbox_scout.inbox_filing_runner._load_queue", return_value=[]):
+            result = natural_intent.handle_natural_message("file inbox")
+        self.assertIn("Inbox Filing Mode preview", result)
+
+    def test_sort_all_unaffected(self):
+        from inbox_scout import natural_intent
+        with patch.object(natural_intent, "_inbox_zero_preview_prompt", return_value="INBOX_ZERO"):
+            result = natural_intent.handle_natural_message("sort all")
+        self.assertNotIn(self._STUB, result)
+
+
 if __name__ == "__main__":
     unittest.main()
