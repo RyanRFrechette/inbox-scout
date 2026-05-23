@@ -261,6 +261,15 @@ def handle_command(text: str) -> str:
     if command.startswith("approve ") or command.startswith("/approve "):
         return evaluate_approval_command(text)
 
+    _FILING_APPLY_STUB = (
+        "Inbox Filing Apply Mode is not implemented yet.\n\n"
+        "No Gmail changes made.\n\n"
+        "Run 'file inbox' to preview the filing plan first."
+    )
+    if command in {"apply filing", "confirm filing", "run filing",
+                   "/apply filing", "/confirm filing", "/run filing"}:
+        return _FILING_APPLY_STUB
+
     if command.startswith("apply ") or command.startswith("/apply "):
         return evaluate_apply_gate(text)
 
