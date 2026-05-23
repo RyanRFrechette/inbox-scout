@@ -193,44 +193,52 @@ def _inbox_zero_preview_prompt(text: str) -> str:
     _scope = _parse_account(text)
     do_both = _scope in ("both", "unspecified")
     resolved_scope = "both" if do_both else _scope
-    _save_pending_autopilot(text, scope=resolved_scope)
 
     parts: list[str] = []
     if do_both:
-        parts.append("Ready to sort both inboxes.")
         p_unread, p_total = _fetch_inbox_counts("primary")
         s_unread, s_total = _fetch_inbox_counts("secondary")
-        count_lines: list[str] = []
-        if p_unread >= 0:
-            count_lines.append(
-                f"Primary (ryanrjfrechette@gmail.com): {p_unread} unread of {p_total} total"
+        if p_unread < 0:
+            return (
+                "Primary Gmail authorization failed. "
+                "Reauthorize the primary account before sorting both inboxes. "
+                "No Gmail changes made."
             )
-        if s_unread >= 0:
-            count_lines.append(
-                f"Secondary (ryanrfrechette@gmail.com): {s_unread} unread of {s_total} total"
+        if s_unread < 0:
+            return (
+                "Secondary Gmail authorization failed. "
+                "Reauthorize the secondary account before sorting both inboxes. "
+                "No Gmail changes made."
             )
-        if count_lines:
-            total_unread = max(p_unread, 0) + max(s_unread, 0)
-            total_emails = max(p_total, 0) + max(s_total, 0)
-            count_lines.append(f"Total: {total_unread} unread across {total_emails} emails")
-            parts.append("\n".join(count_lines))
-            batches = max(1, math.ceil(total_unread / 25)) if total_unread > 0 else 1
-            parts.append(f"~{batches} batch{'es' if batches != 1 else ''} — a few minutes.")
-        else:
-            parts.append("Couldn't load live counts — will scan full inbox.")
+        _save_pending_autopilot(text, scope=resolved_scope)
+        parts.append("Ready to sort both inboxes.")
+        total_unread = p_unread + s_unread
+        total_emails = p_total + s_total
+        count_lines = [
+            f"Primary (ryanrjfrechette@gmail.com): {p_unread} unread of {p_total} total",
+            f"Secondary (ryanrfrechette@gmail.com): {s_unread} unread of {s_total} total",
+            f"Total: {total_unread} unread across {total_emails} emails",
+        ]
+        parts.append("\n".join(count_lines))
+        batches = max(1, math.ceil(total_unread / 25)) if total_unread > 0 else 1
+        parts.append(f"~{batches} batch{'es' if batches != 1 else ''} — a few minutes.")
     else:
         acct_label = "primary" if _scope == "primary" else "secondary"
         email = (
             "ryanrjfrechette@gmail.com" if _scope == "primary" else "ryanrfrechette@gmail.com"
         )
-        parts.append(f"Ready to sort {acct_label} inbox.")
         unread, total = _fetch_inbox_counts(_scope)
-        if unread >= 0:
-            parts.append(f"{acct_label.capitalize()} ({email}): {unread} unread of {total} total")
-            batches = max(1, math.ceil(unread / 25)) if unread > 0 else 1
-            parts.append(f"~{batches} batch{'es' if batches != 1 else ''} — a few minutes.")
-        else:
-            parts.append("Couldn't load live counts — will scan full inbox.")
+        if unread < 0:
+            return (
+                f"{acct_label.capitalize()} Gmail authorization failed. "
+                f"Reauthorize the {acct_label} account before sorting. "
+                "No Gmail changes made."
+            )
+        _save_pending_autopilot(text, scope=resolved_scope)
+        parts.append(f"Ready to sort {acct_label} inbox.")
+        parts.append(f"{acct_label.capitalize()} ({email}): {unread} unread of {total} total")
+        batches = max(1, math.ceil(unread / 25)) if unread > 0 else 1
+        parts.append(f"~{batches} batch{'es' if batches != 1 else ''} — a few minutes.")
 
     parts.append(
         "Protected and manual-review emails will not be archived,"
