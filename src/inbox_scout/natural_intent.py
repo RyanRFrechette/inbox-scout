@@ -906,10 +906,9 @@ def handle_natural_message(text: str) -> str:
 
     if _is_autopilot_cleanup(msg):
         _scope = _parse_account(text)
-        if _scope == "both":
+        if _scope in ("both", "unspecified"):
             return _run_both_autopilot_cleanup(text)
-        _account = "primary" if _scope == "unspecified" else _scope
-        return _run_autonomous_cleanup(text, account=_account)
+        return _run_autonomous_cleanup(text, account=_scope)
 
     if any(phrase in msg for phrase in ["next", "next review", "needs review", "what needs my attention"]):
         return next_review_item()
