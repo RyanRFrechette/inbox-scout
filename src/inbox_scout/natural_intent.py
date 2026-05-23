@@ -26,7 +26,7 @@ from inbox_scout.trash_sender_block_runner import build_sender_block_runner_mess
 from inbox_scout.junk_sender_scout import junk_sender_scout_message, junk_sender_scout_both_message
 from inbox_scout.model_router import get_provider, set_provider, model_status_message, get_active_provider, OLLAMA_MODEL, OPENROUTER_MODEL
 from inbox_scout.mark_read_runner import build_mark_read_plan_message, build_mark_read_runner_message
-from inbox_scout.inbox_filing_runner import build_filing_preview
+from inbox_scout.inbox_filing_runner import build_filing_preview, apply_filing
 from inbox_scout.queue_decision import build_set_decision_message
 from inbox_scout.autopilot_cleanup import (
     run_autopilot_cleanup, run_inbox_zero_autopilot, _is_digest_worthy,
@@ -482,7 +482,7 @@ def help_message() -> str:
         "MAIN COMMANDS\n"
         "cleanup — safe inbox cleanup (both accounts)\n"
         "file inbox — preview filing plan (no Gmail changes)\n"
-        "apply filing — not yet available\n\n"
+        "apply filing primary / apply filing secondary — file safe emails\n\n"
         "STATUS\n"
         "status / progress report — inbox state and last run\n"
         "cancel — cancel any pending action\n"
@@ -1001,10 +1001,13 @@ def handle_natural_message(text: str) -> str:
         return build_filing_preview()
 
     if any(phrase in msg for phrase in ("apply filing", "confirm filing", "run filing")):
+        if "secondary" in msg:
+            return apply_filing("secondary")
+        if "primary" in msg:
+            return apply_filing("primary")
         return (
-            "Inbox Filing Apply Mode is not implemented yet.\n\n"
-            "No Gmail changes made.\n\n"
-            "Run 'file inbox' to preview the filing plan first."
+            "Which account? Say 'apply filing primary' or 'apply filing secondary'.\n\n"
+            "No Gmail changes made."
         )
 
     return _llm_fallback(text)

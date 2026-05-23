@@ -30,6 +30,7 @@ PROTECTED_SENDERS_FILE = CONFIG_DIR / "protected_senders.txt"
 RULES_FILE = CONFIG_DIR / "rules.json"
 
 LATEST_RESORT_PLAN = DATA_DIR / "plans" / "latest_resort_plan.json"
+FILING_LOG = DATA_DIR / "logs" / "filing_actions.jsonl"
 
 
 def verify_project_structure() -> dict:
