@@ -418,6 +418,39 @@ Current preview shows 0 actionable candidates (all 7 secondary-account emails ar
 
 ---
 
+## 2026-05-23 - Gmail auth restoration and sort preflight safety
+Status: LIVE-TESTED ✓
+
+### What happened
+- Primary Gmail modify token (`token_modify.json`) expired/revoked in cloud — `invalid_grant` from Google.
+- Reauthorized locally (OAuth browser flow), base64-encoded new token, updated `GMAIL_TOKEN_MODIFY_JSON` on Droplet, restarted service.
+- `/sort all` now correctly shows both account counts.
+
+### Fixes deployed
+- `a5d7acf` — preflight blocks and skips pending autopilot when either account returns auth failure (`-1, -1`); explicit error message returned instead of "Reply yes to start".
+- `eebdbd4` — preflight returns "caught up" message and skips pending autopilot when total unread == 0; no spurious confirmation prompt.
+
+### Live test — PASSED (2026-05-23)
+- `/sort all` → "Both inboxes are already caught up. 0 unread emails found. No Gmail changes made." ✓
+- No "Reply yes to start" shown when nothing to sort ✓
+- No Gmail changes made ✓
+
+### Tests
+- `tests/test_sort_preflight_auth.py`: 9 tests — all pass (auth failure + zero-unread guards)
+
+---
+
+## 2026-05-23 - Phase 4A: help simplification
+Status: LIVE-TESTED ✓
+
+### What happened
+- Default `/help` simplified to show main workflow: cleanup, file inbox, apply filing, status, cancel, `/help advanced`.
+- Power commands (sort all, apply archive/trash/markread, resort, block senders, model) moved to `/help advanced`.
+- Single source of truth in `natural_intent.py`; `telegram_listener.py` delegates.
+- `4879be7` deployed and live-tested: `/help` and `/help advanced` both worked correctly.
+
+---
+
 ## 2026-05-23 - Pause checkpoint and workflow direction
 Status: DOCUMENTED
 

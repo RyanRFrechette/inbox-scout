@@ -3915,6 +3915,24 @@ Replace the "cleanup → yes" two-step flow with a single "cleanup" command that
 
 ---
 
+## Sort Preflight Safety + Gmail Auth — 2026-05-23
+
+### Changes
+- `a5d7acf`: `_inbox_zero_preview_prompt` blocks and skips `_save_pending_autopilot` when `_fetch_inbox_counts` returns `(-1, -1)` for either required account. Returns explicit auth-failure message.
+- `eebdbd4`: Same function returns "caught up" message and skips pending save when `total_unread == 0`.
+- `4879be7`: Default `/help` simplified; power commands moved to `/help advanced`. Single source of truth in `natural_intent.py`.
+
+### Live test — PASSED (2026-05-23)
+- Primary modify token reauthorized; `GMAIL_TOKEN_MODIFY_JSON` updated on Droplet.
+- `/sort all` → "Both inboxes are already caught up. 0 unread emails found. No Gmail changes made." ✓
+- `/help` and `/help advanced` both correct ✓
+
+### Tests
+- `tests/test_sort_preflight_auth.py`: 9/9 pass
+- `tests/test_help_commands.py`: 20/20 pass
+
+---
+
 ## Sign-off checkpoint - 2026-05-14
 - Last good commit: 8447418 feat: add OpenRouter model switching
 - Review result: PASS with two follow-up action items
