@@ -3915,6 +3915,22 @@ Replace the "cleanup → yes" two-step flow with a single "cleanup" command that
 
 ---
 
+## Phase 4B: Cleanup One-Command UX — 2026-05-23
+
+### Changes
+- `04bddd2`: `_is_autopilot_cleanup` branch in `natural_intent.py` treats `"unspecified"` scope as `"both"`, routing bare `cleanup` to `_run_both_autopilot_cleanup`.
+- `4e17988`: `_cleanup_eta_msg` in `telegram_listener.py` returns `None` when both account counts succeed and total == 0. `run_once` sends caught-up message and skips background thread.
+
+### Live test — PASSED (2026-05-23)
+- `cleanup` → "Both inboxes are already caught up. 0 unread emails found. No Gmail changes made." ✓
+- No Gmail changes made ✓
+
+### Tests
+- `tests/test_cleanup_scope_routing.py`: 5/5 pass
+- `tests/test_telegram_autonomous_cleanup.py`: 29/29 pass
+
+---
+
 ## Sort Preflight Safety + Gmail Auth — 2026-05-23
 
 ### Changes

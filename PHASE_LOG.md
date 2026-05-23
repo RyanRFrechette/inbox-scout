@@ -451,6 +451,23 @@ Status: LIVE-TESTED ✓
 
 ---
 
+## 2026-05-23 - Phase 4B: cleanup one-command UX
+Status: LIVE-TESTED ✓
+
+### What happened
+- `04bddd2`: unspecified `cleanup` scope now routes to both accounts via `_run_both_autopilot_cleanup`. Explicit primary/secondary still routes to single account.
+- `4e17988`: `_cleanup_eta_msg` returns `None` when both account counts succeed and total unread == 0. `run_once` sends "caught up" message and skips the background cleanup thread.
+
+### Live test — PASSED (2026-05-23)
+- `cleanup` → "Both inboxes are already caught up. 0 unread emails found. No Gmail changes made." ✓
+- No background thread started. No Gmail changes made. ✓
+
+### Tests
+- `tests/test_cleanup_scope_routing.py`: 5/5 pass
+- `tests/test_telegram_autonomous_cleanup.py`: 29/29 pass
+
+---
+
 ## 2026-05-23 - Pause checkpoint and workflow direction
 Status: DOCUMENTED
 
