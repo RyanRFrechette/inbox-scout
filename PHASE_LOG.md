@@ -418,6 +418,35 @@ Current preview shows 0 actionable candidates (all 7 secondary-account emails ar
 
 ---
 
+## 2026-05-23 - Pause checkpoint and workflow direction
+Status: DOCUMENTED
+
+### Current completed state
+- Autonomous Cleanup Mode: complete and live-tested. "cleanup" checks both accounts, sends ETA, runs background cleanup, moves only safe low-risk junk to Gmail Trash.
+- Inbox Filing Mode v1A: complete and live-tested. "file inbox" returns preview-only counts. All apply commands safely refuse.
+- Routing safety guards in place for all filing/apply phrases.
+- No Gmail-write filing apply mode. No permanent delete. No sender blocking.
+
+### Future direction confirmed by Ryan
+
+**Phase 4 — Workflow cleanup + /help simplification (next)**
+- Hybrid mode with simple daily commands front-and-center.
+- "cleanup" as the primary default command.
+- /help shows simple commands; `/help advanced` shows full list.
+- /help updated to include "file inbox" and remove stale/redundant commands.
+
+**Phase 5 — Sender blocking**
+- Auto-block senders moved to Trash. Hard gates for protected/system/personal/sensitive senders.
+- No silent blocking: full design + safety-gate + test pass required first.
+
+**Phase 6 — One-command cleanup orchestrator**
+- "cleanup" eventually orchestrates: trash junk → file safe non-junk → mark handled emails read → decide review → auto-block junk senders → Telegram summary.
+
+**Phase 7 — Filing apply mode (v1B)**
+- Only after real safe candidates appear in preview and a safety design pass is complete.
+
+---
+
 ## 2026-05-14 - OpenRouter model switching checkpoint
 - Commit 8447418 added OpenRouter model switching and /model commands
 - Added src/inbox_scout/model_router.py

@@ -1,21 +1,60 @@
 ﻿# Inbox Scout - Project State
 
-Last updated: 2026-05-23 (Inbox Filing Mode v1A preview — live test passed)
+Last updated: 2026-05-23 (Pause checkpoint — Inbox Filing v1A complete, workflow direction set)
 
 ## Current location
 C:\Users\ryanr\inbox-scout
 
 ## Current safety mode
-READ-ONLY for scan. Gmail Trash via "move trash" command only (gated — requires prior cleanup plan).
+READ-ONLY for scan. Gmail Trash via "cleanup" or "move trash" command only (gated).
 
 Inbox Scout currently does NOT:
 - Archive emails
 - Delete emails (permanently)
 - Apply Gmail labels
 - Send replies
+- Block senders
+- Auto-file inbox emails (filing apply mode not yet implemented)
 
 Inbox Scout CAN (with explicit confirmation):
-- Move safe trash candidates to Gmail Trash via "move trash" command (Phase 13Z)
+- Move safe trash candidates to Gmail Trash via autonomous "cleanup" or manual "move trash" (Phase 13Z / Autonomous Cleanup)
+- Preview inbox filing plan via "file inbox" (preview-only, no Gmail changes)
+
+## Pause checkpoint — 2026-05-23
+
+### What is complete and live
+- **Autonomous Cleanup Mode**: "cleanup" → ETA → background scan of both Gmail accounts → moves only safe low-risk junk to Gmail Trash → Telegram summary.
+- **Inbox Filing Mode v1A (preview only)**: "file inbox" → preview counts by bucket (safe, label-only, untouched). No Gmail writes. Apply mode is a safe stub only.
+- **Routing safety guards**: "apply filing", "confirm filing", "run filing", "file inbox", "file safe emails", "preview filing" all guarded deterministically before LLM fallback and Telegram Apply Gate.
+
+### What is NOT yet built
+- Filing apply mode (v1B) — no label/archive/mark-read Gmail writes yet.
+- Sender blocking — not implemented.
+- /help simplification — help text still reflects the old full command surface.
+- One-command cleanup orchestrator — not built.
+
+## Future direction (next phases in order)
+
+### Phase 4 — Workflow cleanup + /help simplification
+- Default command: "cleanup" (eventually handles full safe inbox lifecycle).
+- /help: simple mode front-and-center. Advanced commands move to `/help advanced`.
+- Hybrid mode: simple daily driver + power-user commands still reachable but not shown by default.
+- Cleanup should eventually orchestrate: trash junk → file safe non-junk → mark handled emails read → decide what needs review → auto-block junk senders → send Telegram summary.
+
+### Phase 5 — Sender blocking
+- Auto-block senders of anything safely moved to Trash.
+- Hard gates: never block protected/system/personal/business/medical/legal/finance/job/security senders.
+- No silent blocking: must be designed, tested, and gated before any live sender blocking.
+
+### Phase 6 — One-command cleanup orchestrator
+- "cleanup" becomes the single safe daily command that runs the full lifecycle.
+- All sub-phases (trash, file, mark-read, block) run sequentially with safety gates.
+
+### Phase 7 (future) — Filing apply mode (v1B)
+- label → archive → mark-read for safe_filing candidates only.
+- Two-step Telegram confirmation gate.
+- PII-free JSONL audit log.
+- Only build after real safe candidates exist in preview.
 
 ## Completed phases
 
