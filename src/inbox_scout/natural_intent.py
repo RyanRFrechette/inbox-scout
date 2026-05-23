@@ -210,9 +210,11 @@ def _inbox_zero_preview_prompt(text: str) -> str:
                 "Reauthorize the secondary account before sorting both inboxes. "
                 "No Gmail changes made."
             )
+        total_unread = p_unread + s_unread
+        if total_unread == 0:
+            return "Both inboxes are already caught up. 0 unread emails found. No Gmail changes made."
         _save_pending_autopilot(text, scope=resolved_scope)
         parts.append("Ready to sort both inboxes.")
-        total_unread = p_unread + s_unread
         total_emails = p_total + s_total
         count_lines = [
             f"Primary (ryanrjfrechette@gmail.com): {p_unread} unread of {p_total} total",
@@ -220,7 +222,7 @@ def _inbox_zero_preview_prompt(text: str) -> str:
             f"Total: {total_unread} unread across {total_emails} emails",
         ]
         parts.append("\n".join(count_lines))
-        batches = max(1, math.ceil(total_unread / 25)) if total_unread > 0 else 1
+        batches = max(1, math.ceil(total_unread / 25))
         parts.append(f"~{batches} batch{'es' if batches != 1 else ''} — a few minutes.")
     else:
         acct_label = "primary" if _scope == "primary" else "secondary"
@@ -234,10 +236,12 @@ def _inbox_zero_preview_prompt(text: str) -> str:
                 f"Reauthorize the {acct_label} account before sorting. "
                 "No Gmail changes made."
             )
+        if unread == 0:
+            return f"{acct_label.capitalize()} inbox is already caught up. 0 unread emails found. No Gmail changes made."
         _save_pending_autopilot(text, scope=resolved_scope)
         parts.append(f"Ready to sort {acct_label} inbox.")
         parts.append(f"{acct_label.capitalize()} ({email}): {unread} unread of {total} total")
-        batches = max(1, math.ceil(unread / 25)) if unread > 0 else 1
+        batches = max(1, math.ceil(unread / 25))
         parts.append(f"~{batches} batch{'es' if batches != 1 else ''} — a few minutes.")
 
     parts.append(
