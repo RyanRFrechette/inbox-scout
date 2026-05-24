@@ -11,7 +11,8 @@ from inbox_scout.paths import FILING_LOG
 from inbox_scout.gmail_auth import get_gmail_service
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-LATEST_QUEUE = PROJECT_ROOT / "data" / "review_queue" / "latest_queue.json"
+_QUEUE_DIR = PROJECT_ROOT / "data" / "review_queue"
+LATEST_QUEUE = _QUEUE_DIR / "latest_queue.json"
 
 _SAFE_FILING_CATEGORIES = frozenset({
     "newsletter", "newsletters",
@@ -41,6 +42,20 @@ def _load_queue() -> list[dict[str, Any]]:
     if not LATEST_QUEUE.exists():
         return []
     data = json.loads(LATEST_QUEUE.read_text(encoding="utf-8-sig"))
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        return data.get("queue_items", [])
+    return []
+
+
+def _load_queue_for_account(account: str) -> list[dict[str, Any]]:
+    """Read per-account queue file if present, fall back to latest_queue.json."""
+    per_account = _QUEUE_DIR / f"latest_{account}_queue.json"
+    target = per_account if per_account.exists() else LATEST_QUEUE
+    if not target.exists():
+        return []
+    data = json.loads(target.read_text(encoding="utf-8-sig"))
     if isinstance(data, list):
         return data
     if isinstance(data, dict):
@@ -211,7 +226,7 @@ def apply_filing(account: str) -> str:
     if account not in _KNOWN_ACCOUNTS:
         return f"Unknown account '{account}'. Use 'primary' or 'secondary'.\n\nNo Gmail changes made."
 
-    items = _load_queue()
+    items = _load_queue_for_account(account)
     if not items:
         return (
             "No queue found. Run 'file inbox' or 'cleanup' first.\n\nNo Gmail changes made."

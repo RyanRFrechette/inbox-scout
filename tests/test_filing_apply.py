@@ -31,7 +31,7 @@ class TestApplyFilingSafeItems(unittest.TestCase):
 
     def _run(self, items, account="primary"):
         svc = _mock_service()
-        with patch("inbox_scout.inbox_filing_runner._load_queue", return_value=items), \
+        with patch("inbox_scout.inbox_filing_runner._load_queue_for_account", return_value=items), \
              patch("inbox_scout.inbox_filing_runner.get_gmail_service", return_value=svc), \
              patch("inbox_scout.inbox_filing_runner._log_filing_action"), \
              patch("inbox_scout.inbox_filing_runner._get_or_create_label", return_value="LABEL_ID"):
@@ -54,7 +54,7 @@ class TestApplyFilingSafeItems(unittest.TestCase):
         # shopping_history_soft: category=bills/receipts with low risk
         item = _make_item("q2", "msg2", "bills/receipts", risk=5, account="primary")
         # force it into label_only bucket by patching is_shopping_history_soft
-        with patch("inbox_scout.inbox_filing_runner._load_queue", return_value=[item]), \
+        with patch("inbox_scout.inbox_filing_runner._load_queue_for_account", return_value=[item]), \
              patch("inbox_scout.inbox_filing_runner.get_gmail_service", return_value=_mock_service()), \
              patch("inbox_scout.inbox_filing_runner._log_filing_action"), \
              patch("inbox_scout.inbox_filing_runner._get_or_create_label", return_value="LBL"), \
@@ -86,7 +86,7 @@ class TestApplyFilingAccountGuard(unittest.TestCase):
     def _run(self, items, account):
         from inbox_scout.inbox_filing_runner import apply_filing
         svc = _mock_service()
-        with patch("inbox_scout.inbox_filing_runner._load_queue", return_value=items), \
+        with patch("inbox_scout.inbox_filing_runner._load_queue_for_account", return_value=items), \
              patch("inbox_scout.inbox_filing_runner.get_gmail_service", return_value=svc), \
              patch("inbox_scout.inbox_filing_runner._log_filing_action"), \
              patch("inbox_scout.inbox_filing_runner._get_or_create_label", return_value="LABEL_ID"):
@@ -94,7 +94,7 @@ class TestApplyFilingAccountGuard(unittest.TestCase):
 
     def test_secondary_account_uses_secondary_service(self):
         items = [_make_item("q6", "msg6", "newsletter", account="secondary")]
-        with patch("inbox_scout.inbox_filing_runner._load_queue", return_value=items), \
+        with patch("inbox_scout.inbox_filing_runner._load_queue_for_account", return_value=items), \
              patch("inbox_scout.inbox_filing_runner.get_gmail_service") as mock_svc_fn, \
              patch("inbox_scout.inbox_filing_runner._log_filing_action"), \
              patch("inbox_scout.inbox_filing_runner._get_or_create_label", return_value="LBL"):
@@ -118,7 +118,7 @@ class TestApplyFilingAccountGuard(unittest.TestCase):
     def test_all_items_missing_account_does_not_call_gmail_service(self):
         from inbox_scout.inbox_filing_runner import apply_filing
         items = [_make_item("q8b", "msg8b", "newsletter")]  # no account field
-        with patch("inbox_scout.inbox_filing_runner._load_queue", return_value=items), \
+        with patch("inbox_scout.inbox_filing_runner._load_queue_for_account", return_value=items), \
              patch("inbox_scout.inbox_filing_runner.get_gmail_service") as mock_svc, \
              patch("inbox_scout.inbox_filing_runner._log_filing_action"):
             result = apply_filing("primary")
@@ -134,7 +134,7 @@ class TestApplyFilingAccountGuard(unittest.TestCase):
         from inbox_scout.inbox_filing_runner import apply_filing
         items = [_make_item("q8d", "msg8d", "newsletter", account="secondary")]
         svc = _mock_service()
-        with patch("inbox_scout.inbox_filing_runner._load_queue", return_value=items), \
+        with patch("inbox_scout.inbox_filing_runner._load_queue_for_account", return_value=items), \
              patch("inbox_scout.inbox_filing_runner.get_gmail_service", return_value=svc), \
              patch("inbox_scout.inbox_filing_runner._log_filing_action"), \
              patch("inbox_scout.inbox_filing_runner._get_or_create_label", return_value="LABEL_ID"):
@@ -143,7 +143,7 @@ class TestApplyFilingAccountGuard(unittest.TestCase):
 
     def test_unknown_account_string_refused(self):
         from inbox_scout.inbox_filing_runner import apply_filing
-        with patch("inbox_scout.inbox_filing_runner._load_queue", return_value=[]):
+        with patch("inbox_scout.inbox_filing_runner._load_queue_for_account", return_value=[]):
             result = apply_filing("bogus")
         self.assertIn("Unknown account", result)
         self.assertIn("No Gmail changes made", result)
@@ -153,7 +153,7 @@ class TestApplyFilingEdgeCases(unittest.TestCase):
 
     def test_empty_queue_returns_no_work_message(self):
         from inbox_scout.inbox_filing_runner import apply_filing
-        with patch("inbox_scout.inbox_filing_runner._load_queue", return_value=[]):
+        with patch("inbox_scout.inbox_filing_runner._load_queue_for_account", return_value=[]):
             result = apply_filing("primary")
         self.assertIn("No queue found", result)
         self.assertIn("No Gmail changes made", result)
@@ -161,7 +161,7 @@ class TestApplyFilingEdgeCases(unittest.TestCase):
     def test_auth_failure_returns_safe_message(self):
         from inbox_scout.inbox_filing_runner import apply_filing
         items = [_make_item("q9", "msg9", "newsletter", account="primary")]
-        with patch("inbox_scout.inbox_filing_runner._load_queue", return_value=items), \
+        with patch("inbox_scout.inbox_filing_runner._load_queue_for_account", return_value=items), \
              patch("inbox_scout.inbox_filing_runner.get_gmail_service", side_effect=Exception("invalid_grant")), \
              patch("inbox_scout.inbox_filing_runner._log_filing_action"):
             result = apply_filing("primary")
@@ -173,7 +173,7 @@ class TestApplyFilingEdgeCases(unittest.TestCase):
         item = _make_item("q10", None, "newsletter", account="primary")
         item.pop("message_id", None)
         svc = _mock_service()
-        with patch("inbox_scout.inbox_filing_runner._load_queue", return_value=[item]), \
+        with patch("inbox_scout.inbox_filing_runner._load_queue_for_account", return_value=[item]), \
              patch("inbox_scout.inbox_filing_runner.get_gmail_service", return_value=svc), \
              patch("inbox_scout.inbox_filing_runner._log_filing_action"), \
              patch("inbox_scout.inbox_filing_runner._get_or_create_label", return_value="LBL"):
@@ -189,7 +189,7 @@ class TestApplyFilingLogPiiSafety(unittest.TestCase):
         logged = []
         items = [_make_item("q11", "msg11", "newsletter")]
         svc = _mock_service()
-        with patch("inbox_scout.inbox_filing_runner._load_queue", return_value=items), \
+        with patch("inbox_scout.inbox_filing_runner._load_queue_for_account", return_value=items), \
              patch("inbox_scout.inbox_filing_runner.get_gmail_service", return_value=svc), \
              patch("inbox_scout.inbox_filing_runner._log_filing_action", side_effect=logged.append), \
              patch("inbox_scout.inbox_filing_runner._get_or_create_label", return_value="LBL"):

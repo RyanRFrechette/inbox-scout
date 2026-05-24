@@ -62,7 +62,7 @@ def build_queue_items(results, account=None):
     return queue_items
 
 
-def save_queue(queue_items, source_report):
+def save_queue(queue_items, source_report, account=None):
     QUEUE_DIR.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -82,8 +82,13 @@ def save_queue(queue_items, source_report):
         "queue_items": queue_items
     }
 
-    queue_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-    LATEST_QUEUE_FILE.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    serialized = json.dumps(payload, indent=2, ensure_ascii=False)
+    queue_path.write_text(serialized, encoding="utf-8")
+    LATEST_QUEUE_FILE.write_text(serialized, encoding="utf-8")
+
+    if account in _KNOWN_ACCOUNTS:
+        per_account_file = QUEUE_DIR / f"latest_{account}_queue.json"
+        per_account_file.write_text(serialized, encoding="utf-8")
 
     return queue_path
 
@@ -115,7 +120,7 @@ def main():
     results = json.loads(source_report.read_text(encoding="utf-8"))
 
     queue_items = build_queue_items(results, account=args.account)
-    queue_path = save_queue(queue_items, source_report)
+    queue_path = save_queue(queue_items, source_report, account=args.account)
 
     print_queue_summary(queue_items, queue_path)
 
