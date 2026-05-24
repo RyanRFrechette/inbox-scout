@@ -27,14 +27,18 @@ def find_latest_report_json():
     return reports[0]
 
 
-def build_queue_items(results):
+_KNOWN_ACCOUNTS = {"primary", "secondary"}
+
+
+def build_queue_items(results, account=None):
     queue_items = []
+    stamped_account = account if account in _KNOWN_ACCOUNTS else None
 
     for index, item in enumerate(results, start=1):
         ai = item.get("ai_classification", {})
         manual_review = bool(ai.get("manual_review"))
 
-        queue_items.append({
+        entry = {
             "queue_id": index,
             "message_id": item.get("message_id"),
             "subject": item.get("subject", "(No subject)"),
@@ -48,8 +52,12 @@ def build_queue_items(results):
             "reason": ai.get("reason", ""),
             "snippet": item.get("snippet", ""),
             "local_decision": "protected_review" if manual_review else "pending_review",
-            "gmail_action_taken": False
-        })
+            "gmail_action_taken": False,
+        }
+        if stamped_account is not None:
+            entry["account"] = stamped_account
+
+        queue_items.append(entry)
 
     return queue_items
 
@@ -100,12 +108,13 @@ def print_queue_summary(queue_items, queue_path):
 def main():
     parser = argparse.ArgumentParser(description="Inbox Scout Local Review Queue")
     parser.add_argument("--from-latest-report", action="store_true")
+    parser.add_argument("--account", type=str, default=None)
     args = parser.parse_args()
 
     source_report = find_latest_report_json()
     results = json.loads(source_report.read_text(encoding="utf-8"))
 
-    queue_items = build_queue_items(results)
+    queue_items = build_queue_items(results, account=args.account)
     queue_path = save_queue(queue_items, source_report)
 
     print_queue_summary(queue_items, queue_path)

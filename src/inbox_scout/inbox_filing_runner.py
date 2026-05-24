@@ -220,12 +220,13 @@ def apply_filing(account: str) -> str:
     safe_filing: list[dict] = []
     label_only_items: list[dict] = []
     skipped_protected = 0
-    skipped_account_unknown = 0
+    skipped_missing_account = 0
+    skipped_account_mismatch = 0
 
     for item in items:
         item_account = _get_item_account(item)
         if item_account is None:
-            skipped_account_unknown += 1
+            skipped_missing_account += 1
             _log_filing_action({
                 "event": "filing_skipped", "timestamp": _now_iso(),
                 "queue_id": _get_queue_id(item), "account": account,
@@ -234,7 +235,7 @@ def apply_filing(account: str) -> str:
             })
             continue
         if item_account != account:
-            skipped_account_unknown += 1
+            skipped_account_mismatch += 1
             _log_filing_action({
                 "event": "filing_skipped", "timestamp": _now_iso(),
                 "queue_id": _get_queue_id(item), "account": account,
@@ -254,7 +255,8 @@ def apply_filing(account: str) -> str:
         return (
             f"No actionable items for {account} account.\n"
             f"Protected/untouched skipped: {skipped_protected}\n"
-            f"Account mismatch skipped: {skipped_account_unknown}\n\n"
+            f"Skipped missing/unknown account: {skipped_missing_account}\n"
+            f"Skipped account mismatch: {skipped_account_mismatch}\n\n"
             "No Gmail changes made."
         )
 
@@ -371,7 +373,8 @@ def apply_filing(account: str) -> str:
         f"Marked read: {marked_read}",
         f"Label only (not archived): {label_only_count}",
         f"Skipped protected: {skipped_protected}",
-        f"Skipped account mismatch: {skipped_account_unknown}",
+        f"Skipped missing/unknown account: {skipped_missing_account}",
+        f"Skipped account mismatch: {skipped_account_mismatch}",
         f"Failed: {failed}",
     ]
     if labeled == 0 and failed == 0:

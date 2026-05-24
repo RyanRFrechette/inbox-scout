@@ -220,6 +220,7 @@ def main() -> None:
         "-m",
         "inbox_scout.review_queue",
         "--from-latest-report",
+        "--account", args.account,
     ]
 
     if not args.run:
