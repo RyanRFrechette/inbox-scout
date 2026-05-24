@@ -116,9 +116,9 @@ class TestPreviewOutput(unittest.TestCase):
         result = self._preview_with_items([_item("newsletter", 10)])
         self.assertIn("No Gmail changes yet.", result)
 
-    def test_apply_mode_not_implemented(self):
+    def test_preview_shows_apply_instructions(self):
         result = self._preview_with_items([_item("newsletter", 10)])
-        self.assertIn("Apply mode is not implemented yet.", result)
+        self.assertIn("apply filing primary", result)
 
     def test_no_subject_in_output(self):
         item = _item("newsletter", 10)
@@ -193,7 +193,7 @@ class TestNaturalIntentRouting(unittest.TestCase):
 
 
 class TestFilingApplyGuard(unittest.TestCase):
-    _STUB = "Inbox Filing Apply Mode is not implemented yet."
+    _NO_GMAIL = "No Gmail changes made"
     _AUTOPILOT = "CONFIRM INBOX AUTOPILOT"
 
     def _route(self, phrase):
@@ -203,14 +203,14 @@ class TestFilingApplyGuard(unittest.TestCase):
             self._mock_llm = mock_llm
         return result
 
-    def test_apply_filing_returns_stub(self):
-        self.assertIn(self._STUB, self._route("apply filing"))
+    def test_apply_filing_no_account_returns_no_gmail(self):
+        self.assertIn(self._NO_GMAIL, self._route("apply filing"))
 
-    def test_confirm_filing_returns_stub(self):
-        self.assertIn(self._STUB, self._route("confirm filing"))
+    def test_confirm_filing_no_account_returns_no_gmail(self):
+        self.assertIn(self._NO_GMAIL, self._route("confirm filing"))
 
-    def test_run_filing_returns_stub(self):
-        self.assertIn(self._STUB, self._route("run filing"))
+    def test_run_filing_no_account_returns_no_gmail(self):
+        self.assertIn(self._NO_GMAIL, self._route("run filing"))
 
     def test_apply_filing_not_autopilot(self):
         self.assertNotIn(self._AUTOPILOT, self._route("apply filing"))
@@ -234,7 +234,7 @@ class TestFilingApplyGuard(unittest.TestCase):
         from inbox_scout import natural_intent
         with patch.object(natural_intent, "_inbox_zero_preview_prompt", return_value="INBOX_ZERO"):
             result = natural_intent.handle_natural_message("sort all")
-        self.assertNotIn(self._STUB, result)
+        self.assertNotIn(self._NO_GMAIL, result)
 
 
 if __name__ == "__main__":

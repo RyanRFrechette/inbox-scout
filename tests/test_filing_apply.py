@@ -39,7 +39,7 @@ class TestApplyFilingSafeItems(unittest.TestCase):
             return apply_filing(account), svc
 
     def test_safe_filing_item_archives_and_marks_read(self):
-        items = [_make_item("q1", "msg1", "newsletter")]
+        items = [_make_item("q1", "msg1", "newsletter", account="primary")]
         result, svc = self._run(items)
         call_args = svc.users().messages().modify.call_args
         body = call_args[1]["body"]
@@ -52,7 +52,7 @@ class TestApplyFilingSafeItems(unittest.TestCase):
     def test_label_only_item_does_not_archive_or_mark_read(self):
         from inbox_scout.inbox_filing_runner import apply_filing
         # shopping_history_soft: category=bills/receipts with low risk
-        item = _make_item("q2", "msg2", "bills/receipts", risk=5)
+        item = _make_item("q2", "msg2", "bills/receipts", risk=5, account="primary")
         # force it into label_only bucket by patching is_shopping_history_soft
         with patch("inbox_scout.inbox_filing_runner._load_queue", return_value=[item]), \
              patch("inbox_scout.inbox_filing_runner.get_gmail_service", return_value=_mock_service()), \
@@ -65,18 +65,18 @@ class TestApplyFilingSafeItems(unittest.TestCase):
         self.assertIn("Marked read: 0", result)
 
     def test_protected_item_skipped_no_gmail_call(self):
-        items = [_make_item("q3", "msg3", "newsletter", protected=True)]
+        items = [_make_item("q3", "msg3", "newsletter", protected=True, account="primary")]
         result, svc = self._run(items)
         svc.users().messages().modify.assert_not_called()
         self.assertIn("No Gmail changes made", result)
 
     def test_manual_review_item_skipped(self):
-        items = [_make_item("q4", "msg4", "newsletter", manual_review=True)]
+        items = [_make_item("q4", "msg4", "newsletter", manual_review=True, account="primary")]
         result, svc = self._run(items)
         svc.users().messages().modify.assert_not_called()
 
     def test_high_risk_item_skipped(self):
-        items = [_make_item("q5", "msg5", "newsletter", risk=99)]
+        items = [_make_item("q5", "msg5", "newsletter", risk=99, account="primary")]
         result, svc = self._run(items)
         svc.users().messages().modify.assert_not_called()
 
@@ -93,7 +93,7 @@ class TestApplyFilingAccountGuard(unittest.TestCase):
             return apply_filing(account), svc
 
     def test_secondary_account_uses_secondary_service(self):
-        items = [_make_item("q6", "msg6", "newsletter")]
+        items = [_make_item("q6", "msg6", "newsletter", account="secondary")]
         with patch("inbox_scout.inbox_filing_runner._load_queue", return_value=items), \
              patch("inbox_scout.inbox_filing_runner.get_gmail_service") as mock_svc_fn, \
              patch("inbox_scout.inbox_filing_runner._log_filing_action"), \
@@ -109,9 +109,36 @@ class TestApplyFilingAccountGuard(unittest.TestCase):
         svc.users().messages().modify.assert_not_called()
         self.assertIn("No Gmail changes made", result)
 
-    def test_item_with_no_account_field_is_processed(self):
-        items = [_make_item("q8", "msg8", "newsletter")]  # no account field
+    def test_item_with_no_account_field_is_skipped(self):
+        items = [_make_item("q8", "msg8", "newsletter")]  # no account field — must be skipped
         result, svc = self._run(items, "primary")
+        svc.users().messages().modify.assert_not_called()
+        self.assertIn("No Gmail changes made", result)
+
+    def test_all_items_missing_account_does_not_call_gmail_service(self):
+        from inbox_scout.inbox_filing_runner import apply_filing
+        items = [_make_item("q8b", "msg8b", "newsletter")]  # no account field
+        with patch("inbox_scout.inbox_filing_runner._load_queue", return_value=items), \
+             patch("inbox_scout.inbox_filing_runner.get_gmail_service") as mock_svc, \
+             patch("inbox_scout.inbox_filing_runner._log_filing_action"):
+            result = apply_filing("primary")
+        mock_svc.assert_not_called()
+        self.assertIn("No Gmail changes made", result)
+
+    def test_explicit_primary_account_item_applies(self):
+        items = [_make_item("q8c", "msg8c", "newsletter", account="primary")]
+        result, svc = self._run(items, "primary")
+        self.assertIn("Labeled: 1", result)
+
+    def test_explicit_secondary_account_item_applies(self):
+        from inbox_scout.inbox_filing_runner import apply_filing
+        items = [_make_item("q8d", "msg8d", "newsletter", account="secondary")]
+        svc = _mock_service()
+        with patch("inbox_scout.inbox_filing_runner._load_queue", return_value=items), \
+             patch("inbox_scout.inbox_filing_runner.get_gmail_service", return_value=svc), \
+             patch("inbox_scout.inbox_filing_runner._log_filing_action"), \
+             patch("inbox_scout.inbox_filing_runner._get_or_create_label", return_value="LABEL_ID"):
+            result = apply_filing("secondary")
         self.assertIn("Labeled: 1", result)
 
     def test_unknown_account_string_refused(self):
@@ -133,7 +160,7 @@ class TestApplyFilingEdgeCases(unittest.TestCase):
 
     def test_auth_failure_returns_safe_message(self):
         from inbox_scout.inbox_filing_runner import apply_filing
-        items = [_make_item("q9", "msg9", "newsletter")]
+        items = [_make_item("q9", "msg9", "newsletter", account="primary")]
         with patch("inbox_scout.inbox_filing_runner._load_queue", return_value=items), \
              patch("inbox_scout.inbox_filing_runner.get_gmail_service", side_effect=Exception("invalid_grant")), \
              patch("inbox_scout.inbox_filing_runner._log_filing_action"):
@@ -143,7 +170,7 @@ class TestApplyFilingEdgeCases(unittest.TestCase):
 
     def test_missing_message_id_counted_as_failed(self):
         from inbox_scout.inbox_filing_runner import apply_filing
-        item = _make_item("q10", None, "newsletter")
+        item = _make_item("q10", None, "newsletter", account="primary")
         item.pop("message_id", None)
         svc = _mock_service()
         with patch("inbox_scout.inbox_filing_runner._load_queue", return_value=[item]), \
@@ -213,6 +240,35 @@ class TestNaturalIntentApplyFilingRouting(unittest.TestCase):
         with patch("inbox_scout.natural_intent.apply_filing", return_value="applied") as mock_apply:
             result = natural_intent.handle_natural_message("run filing secondary")
         mock_apply.assert_called_once_with("secondary")
+
+
+class TestTelegramFilingGateRouting(unittest.TestCase):
+    """Filing phrases must reach handle_natural_message, not evaluate_apply_gate."""
+
+    def _handle(self, text):
+        from inbox_scout.telegram_listener import handle_command
+        return handle_command(text)
+
+    def test_apply_filing_primary_does_not_hit_apply_gate(self):
+        with patch("inbox_scout.telegram_listener.handle_natural_message", return_value="filing_called") as mock_ni, \
+             patch("inbox_scout.telegram_listener.evaluate_apply_gate") as mock_gate:
+            result = self._handle("apply filing primary")
+        mock_ni.assert_called_once()
+        mock_gate.assert_not_called()
+
+    def test_apply_filing_secondary_does_not_hit_apply_gate(self):
+        with patch("inbox_scout.telegram_listener.handle_natural_message", return_value="filing_called") as mock_ni, \
+             patch("inbox_scout.telegram_listener.evaluate_apply_gate") as mock_gate:
+            result = self._handle("apply filing secondary")
+        mock_ni.assert_called_once()
+        mock_gate.assert_not_called()
+
+    def test_apply_archive_2_still_hits_apply_gate(self):
+        with patch("inbox_scout.telegram_listener.evaluate_apply_gate", return_value="gate_called") as mock_gate, \
+             patch("inbox_scout.telegram_listener.handle_natural_message") as mock_ni:
+            result = self._handle("apply archive 2")
+        mock_gate.assert_called_once()
+        mock_ni.assert_not_called()
 
 
 if __name__ == "__main__":

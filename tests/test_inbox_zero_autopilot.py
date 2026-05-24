@@ -33,8 +33,14 @@ class TestInboxZeroRouting(unittest.TestCase):
     def test_sort_all(self):
         self._assert_routes_to_inbox_zero("sort all")
 
-    def test_clean_all(self):
-        self._assert_routes_to_inbox_zero("clean all")
+    def test_clean_all_routes_to_autopilot_not_inbox_zero(self):
+        # "clean all" was moved to _AUTOPILOT_PHRASES in Phase 4B
+        from inbox_scout import natural_intent
+        with patch("inbox_scout.natural_intent.run_autopilot_cleanup", return_value="autopilot") as mock_ap, \
+             patch("inbox_scout.natural_intent._inbox_zero_preview_prompt") as mock_iz:
+            natural_intent.handle_natural_message("clean all")
+        mock_ap.assert_called()
+        mock_iz.assert_not_called()
 
     def test_get_me_to_inbox_zero(self):
         self._assert_routes_to_inbox_zero("get me to inbox zero")
@@ -164,8 +170,9 @@ class TestIsInboxZeroHelper(unittest.TestCase):
     def test_sort_all_matches(self):
         self.assertTrue(self.check("sort all"))
 
-    def test_clean_all_matches(self):
-        self.assertTrue(self.check("clean all"))
+    def test_clean_all_does_not_match_inbox_zero(self):
+        # "clean all" moved to _AUTOPILOT_PHRASES in Phase 4B
+        self.assertFalse(self.check("clean all"))
 
     def test_get_me_to_inbox_zero_matches(self):
         self.assertTrue(self.check("get me to inbox zero"))
@@ -1193,24 +1200,23 @@ class TestInboxZeroPreviewFlow(unittest.TestCase):
         self.assertIn("7", result)
         self.assertIn("30", result)
 
-    def test_preview_saves_pending_with_scope_both(self):
+    def test_preview_auth_failure_does_not_save_pending(self):
+        # When primary account auth fails (-1), preflight blocks without saving pending
         from inbox_scout import natural_intent
         with patch("inbox_scout.natural_intent._fetch_inbox_counts", return_value=(-1, -1)), \
              patch("inbox_scout.natural_intent._save_pending_autopilot") as mock_save:
-            natural_intent.handle_natural_message("sort all")
-        mock_save.assert_called_once()
-        args, kwargs = mock_save.call_args
-        # Second positional or keyword arg should be scope="both"
-        scope_arg = kwargs.get("scope") or (args[1] if len(args) > 1 else None)
-        self.assertEqual(scope_arg, "both")
+            result = natural_intent.handle_natural_message("sort all")
+        mock_save.assert_not_called()
+        self.assertIn("No Gmail changes made", result)
 
     def test_counts_unavailable_no_raw_negative_one(self):
+        # Auth failure: result should not expose raw -1 and should describe the failure
         from inbox_scout import natural_intent
         with patch("inbox_scout.natural_intent._fetch_inbox_counts", return_value=(-1, -1)), \
              patch("inbox_scout.natural_intent._save_pending_autopilot"):
             result = natural_intent.handle_natural_message("sort all")
         self.assertNotIn("-1", result)
-        self.assertIn("yes", result.lower())
+        self.assertIn("authorization failed", result.lower())
 
     def test_yes_after_preview_runs_both_accounts(self):
         """After sort-all preview (scope stored as both), yes must run both-account autopilot."""

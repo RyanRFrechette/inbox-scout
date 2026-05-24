@@ -224,7 +224,16 @@ def apply_filing(account: str) -> str:
 
     for item in items:
         item_account = _get_item_account(item)
-        if item_account is not None and item_account != account:
+        if item_account is None:
+            skipped_account_unknown += 1
+            _log_filing_action({
+                "event": "filing_skipped", "timestamp": _now_iso(),
+                "queue_id": _get_queue_id(item), "account": account,
+                "bucket": "unknown", "action": "skip",
+                "gmail_changed": False, "skipped_reason": "missing_or_unknown_account",
+            })
+            continue
+        if item_account != account:
             skipped_account_unknown += 1
             _log_filing_action({
                 "event": "filing_skipped", "timestamp": _now_iso(),

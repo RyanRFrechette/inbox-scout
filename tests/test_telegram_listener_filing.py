@@ -13,7 +13,7 @@ from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-_FILING_STUB = "Inbox Filing Apply Mode is not implemented yet."
+_NATURAL = "NATURAL"
 _APPLY_GATE = "Telegram Apply Gate"
 
 
@@ -28,14 +28,14 @@ def _handle(text: str) -> str:
 
 
 class TestFilingApplyPreGuard(unittest.TestCase):
-    def test_apply_filing_returns_stub(self):
-        self.assertIn(_FILING_STUB, _handle("apply filing"))
+    def test_apply_filing_routes_to_natural(self):
+        self.assertEqual(_NATURAL, _handle("apply filing"))
 
-    def test_confirm_filing_returns_stub(self):
-        self.assertIn(_FILING_STUB, _handle("confirm filing"))
+    def test_confirm_filing_routes_to_natural(self):
+        self.assertEqual(_NATURAL, _handle("confirm filing"))
 
-    def test_run_filing_returns_stub(self):
-        self.assertIn(_FILING_STUB, _handle("run filing"))
+    def test_run_filing_routes_to_natural(self):
+        self.assertEqual(_NATURAL, _handle("run filing"))
 
     def test_apply_filing_not_apply_gate(self):
         self.assertNotIn(_APPLY_GATE, _handle("apply filing"))
